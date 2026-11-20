@@ -17,7 +17,7 @@ Use a clean grotesk for headings, the system sans stack for supporting copy, and
 | --- | --- |
 | Home | Hardware appears in orbit behind the wordmark. Individual letters fall and fade as the reader leaves the hero. |
 | CCNA | The background shifts to chalk jade. A real command example bridges the landing page and the practice catalog. |
-| CCNP | The topic rail slides into view horizontally. Scroll-snap, touch, arrow buttons, and keyboard focus let visitors browse it independently of the vertical page. |
+| CCNP | Black and violet router consoles stack vertically, with verification examples for OSPF, BGP, route policy, and redistribution. |
 | LabSim | A router, switch, and host share a small topology. The full workspace preview pairs that topology with a port inspector and console. |
 | Footer | Return to the routes or open the source repository. |
 

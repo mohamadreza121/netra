@@ -1,6 +1,62 @@
-const panel = (symbol, title, body, command) => `<article class="topic-tile">
-<span class="tile-symbol" aria-hidden="true">${symbol}</span><h3>${title}</h3><p>${body}</p>
-<code>${command}</code></article>`;
+const ccnpExamples = [
+  {
+    topic: 'OSPF',
+    device: 'CORE-01',
+    command: 'show ip ospf neighbor detail',
+    output: `Neighbor 10.255.0.2, interface address 10.0.12.2
+    In the area 0 via interface GigabitEthernet0/0
+    Neighbor priority is 1, State is FULL
+    Dead timer due in 00:00:36`,
+    caption: 'Confirm full adjacency in backbone area 0.'
+  },
+  {
+    topic: 'BGP',
+    device: 'EDGE-01',
+    command: 'show ip bgp 203.0.113.0',
+    output: `BGP routing table entry for 203.0.113.0/24
+Paths: (2 available, best #1, table default)
+  64512
+    192.0.2.1 from 192.0.2.1 (10.255.1.1)
+      Origin IGP, localpref 200, valid, external, best
+  64513
+    192.0.2.5 from 192.0.2.5 (10.255.1.2)
+      Origin IGP, localpref 100, valid, external`,
+    caption: 'Compare two paths and identify the selected next hop.'
+  },
+  {
+    topic: 'Route Policy',
+    device: 'EDGE-01',
+    command: 'show route-map PREFER-PRIMARY',
+    output: `route-map PREFER-PRIMARY, permit, sequence 10
+  Match clauses:
+    ip address prefix-lists: PARTNER-NETS
+  Set clauses:
+    local-preference 200`,
+    caption: 'Check which prefixes receive higher local preference.'
+  },
+  {
+    topic: 'Redistribution',
+    device: 'CORE-01',
+    command: 'show ip route 10.40.0.0',
+    output: `Routing entry for 10.40.0.0/16
+  Known via "ospf 10", distance 110, metric 20, type extern 2
+  Routing Descriptor Blocks:
+  * 10.0.12.2, via GigabitEthernet0/0
+      Route metric is 20, traffic share count is 1
+      Route tag 65010`,
+    caption: 'Verify the redistributed route’s external metric and tag.'
+  }
+];
+
+function ccnpConsole({ topic, device, command, output, caption }) {
+  return `<article class="terminal ccnp-console">
+<div class="terminal-bar"><span class="terminal-dot" aria-hidden="true"></span><h3>${topic}</h3><span>${device}</span></div>
+<pre><code><span class="prompt">${device}#</span> <strong>${command}</strong>
+
+${output}</code></pre>
+<div class="terminal-caption">${caption}</div>
+</article>`;
+}
 
 export function home() {
 return `<section class="hero" aria-labelledby="hero-title">
@@ -36,16 +92,15 @@ VLAN Name          Status    Ports
 <div class="terminal-caption">Sample output · Verify access VLAN assignments</div>
 </div>
 </div></section>
-<section class="ccnp-section" id="ccnp"><div class="frame">
-<div class="ccnp-heading"><div class="section-copy"><p class="eyebrow">CCNP PRACTICE</p>
-<h2>Think in<br>networks<span>.</span></h2><p>Follow routes beyond a single device. Work through neighbor state, path selection, and the effect of a routing policy.</p></div>
-<a class="button ghost" href="/ccnp/">Explore CCNP topics</a></div>
-<div class="rail-controls" aria-label="Topic rail controls"><button type="button" data-rail-step="-1" aria-label="Previous topics">←</button><button type="button" data-rail-step="1" aria-label="Next topics">→</button></div>
-<div class="topic-rail" tabindex="0" aria-label="CCNP topic examples">
-${panel('◎','OSPF','Trace an adjacency from the first hello to a learned route.','show ip ospf neighbor')}
-${panel('⬡','BGP','Inspect peering and compare the paths behind a prefix.','show bgp ipv4 unicast')}
-${panel('⌘','Route policy','Match a set of prefixes and see what the router advertises.','show route-map')}
-${panel('⇄','Redistribution','Follow a route as it moves between routing domains.','show ip protocols')}
+<section class="ccnp-section" id="ccnp" aria-labelledby="ccnp-title"><div class="frame ccnp-grid">
+<div class="section-copy">
+<p class="eyebrow">CCNP PRACTICE</p>
+<h2 id="ccnp-title">Think in<br>networks<span>.</span></h2>
+<p>Verify OSPF adjacencies, compare BGP paths, and see how policy and redistribution shape the routing table.</p>
+<a class="button violet-button" href="/ccnp/">Explore CCNP topics</a>
+</div>
+<div class="console-stack" aria-label="Sample router output">
+${ccnpExamples.map(ccnpConsole).join('')}
 </div>
 </div></section>
 <section class="lab-section" id="labsim"><div class="frame section-grid">
