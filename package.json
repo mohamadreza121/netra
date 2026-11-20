@@ -1,0 +1,9 @@
+{
+  "name": "netra",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "node --check src/motion.js && node --check src/features/labsim/demo.js && node scripts/build.mjs"
+  }
+}
