@@ -1,5 +1,5 @@
 import { deviceById, gateway, hostIp, inSubnet, ipv4, linkUp, macAddress, models, networkAddress, peer, prefixLength, routeTable } from './network.js';
-import { ospfInterfaces, ospfNeighbors, ospfSnapshot, routerId } from './ospf.js';
+import { areaId, ospfInterfaces, ospfNeighbors, ospfSnapshot, routerId } from './ospf.js';
 import { parseRule } from './acl.js';
 import { interfacesV6, neighborRowsV6, networkV6, parsePrefixV6, parseV6, routesV6, formatV6 } from './ipv6.js';
 
@@ -14,8 +14,8 @@ export function interfaceName(words) {
   const name=words.join('').toLowerCase();
   const port=/^([a-z]+)(\d+\/\d+(?:\.[1-9]\d{0,3})?)$/.exec(name);
   if (port && 'gigabitethernet'.startsWith(port[1])) return 'Gi'+port[2];
-  const virtual=/^(lo(?:opback)?|vl(?:an)?)(\d{1,4})$/.exec(name);
-  if (virtual) return (virtual[1].startsWith('lo')?'Lo':'Vlan')+Number(virtual[2]);
+  const virtual=/^(lo(?:opback)?|vl(?:an)?|tu(?:nnel)?)(\d{1,4})$/.exec(name);
+  if (virtual) return (virtual[1].startsWith('lo')?'Lo':virtual[1].startsWith('tu')?'Tu':'Vlan')+Number(virtual[2]);
   return null;
 }
 
@@ -53,7 +53,7 @@ function discover(lab,device,protocol) {
   return models[device.type].ports.flatMap(port=>{
     const far=peer(lab,device,port);
     const node=far&&deviceById(lab,far.device);
-    if (!node || !['router','switch'].includes(node.type) || !linkUp(lab,device,port)) return [];
+    if (!node || !['router','switch','ap','wlc','phone'].includes(node.type) || !linkUp(lab,device,port)) return [];
     if (!(node.discovery?.[protocol]??(protocol==='cdp')) || device.ports[port][localKeys[0]]===false || node.ports[far.port][remoteKeys[0]]===false) return [];
     return [{port,node,remote:far.port}];
   });
@@ -99,28 +99,37 @@ export function diagnostic(lab,d,s,args,c) {
     }));
   }
   if (c.startsWith('show ip route')) {
-    const query=args[3];
-    const routes=routeTable(lab,d);
+    const vrf=args[3]==='vrf'?args[4]:undefined;
+    const query=args[vrf?5:3];
+    const routes=routeTable(lab,d,vrf);
     const local=routes.filter(r=>r.protocol==='connected'&&r.prefix<32).map(r=>({...r,destination:d.ports[r.port].address,prefix:32,protocol:'local'}));
     const all=[...routes,...local].sort((a,b)=>b.prefix-a.prefix);
     const selected = !query?all:validIp(query)?all.filter(r=>inSubnet(query,r.destination,r.prefix)).slice(0,1):all.filter(r=>r.protocol===query);
     return rows('',selected.map(r=>{
-      const code={connected:'C',local:'L',static:r.prefix?'S':'S*',ospf:'O'}[r.protocol];
-      return `${code.padEnd(3)}${r.destination}/${r.prefix} ${r.next?`[${r.distance}/${r.metric??0}] via ${r.next}, ${r.port}`:`is directly connected, ${r.port}`}`;
+      const code={connected:'C',local:'L',static:r.prefix?'S':'S*',ospf:'O'+(r.ospfType?' '+r.ospfType:''),bgp:'B',eigrp:r.external?'D EX':'D'}[r.protocol];
+      return `${(code.length<3?code.padEnd(3):code+' ')}${r.destination}/${r.prefix} ${r.next?`[${r.distance}/${r.metric??0}] via ${r.next}, ${r.port}`:`is directly connected, ${r.port}`}`;
     }),'No active routes.');
   }
-  if (c.startsWith('show ip ospf')||c==='show ip protocols') {
+  if(c==='show ip protocols'){
+    const body=[];
+    if(d.ospf)body.push('Routing Protocol is "ospf '+d.ospf.id+'"',...d.ospf.networks.map(r=>
+      '  Network '+r.address+' '+r.wildcard+' area '+(r.area??0)));
+    if(d.eigrp?.asn)body.push('Routing Protocol is "eigrp '+d.eigrp.asn+'"',...d.eigrp.networks.map(r=>'  Network '+r.address+' '+r.wildcard));
+    if(d.bgp)body.push('Routing Protocol is "bgp '+d.bgp.asn+'"',...Object.entries(d.bgp.neighbors).map(([ip,n])=>'  Neighbor '+ip+' AS '+n.asn));
+    return reply(body.join('\n')||'No dynamic IPv4 routing protocols configured.');
+  }
+  if (c.startsWith('show ip ospf')) {
     if (!d.ospf) return reply('OSPF is not configured.');
-    const header=`OSPF process ${d.ospf.id}, Router ID ${routerId(d)??'unassigned'}, Area 0`;
+    const header=`OSPF process ${d.ospf.id}, Router ID ${routerId(d)??'unassigned'}, Areas ${[...new Set(ospfInterfaces(lab,d).map(row=>row.area))].join(', ')||'none'}`;
     if (args[3]==='neighbor') return rows('Neighbor ID      State     Address          Interface',
-      ospfNeighbors(lab,d,ospfSnapshot(lab)).map(n=>`${routerId(n.device).padEnd(17)}FULL      ${n.remote.address.padEnd(17)}${n.local.port}${args[4]?'   '+n.device.name:''}`),'No FULL adjacencies.');
+      ospfNeighbors(lab,d,ospfSnapshot(lab)).map(n=>`${routerId(n.device).padEnd(17)}FULL      ${n.remote.address.padEnd(17)}${n.local.port}  area ${n.local.area}${args[4]?'   '+n.device.name:''}`),'No FULL adjacencies.');
     if (args[3]==='interface') {
       const name=args[4]&&args[4]!=='brief'?interfaceName(args.slice(4)):null;
       return rows('Interface   Address             Area  Cost  Hello/Dead',
-        ospfInterfaces(lab,d).filter(p=>!name||p.port===name).map(p=>`${p.port.padEnd(12)}${(p.address+'/'+p.prefix).padEnd(20)}0     ${String(p.cost).padEnd(6)}${p.hello}/${p.dead} ${p.passive?'passive':p.network}`),'No active OSPF interfaces.');
+        ospfInterfaces(lab,d).filter(p=>!name||p.port===name).map(p=>`${p.port.padEnd(12)}${(p.address+'/'+p.prefix).padEnd(20)}${String(p.area).padEnd(7)}${String(p.cost).padEnd(6)}${p.hello}/${p.dead} ${p.passive?'passive':p.network}`),'No active OSPF interfaces.');
     }
-    if (args[3]==='database') return rows('Area 0 · Reachable network advertisements',routeTable(lab,d).filter(r=>r.protocol==='ospf').map(r=>r.destination+'/'+r.prefix+' via '+r.next+' metric '+r.metric));
-    return reply(header+'\n'+d.ospf.networks.map(r=>' network '+r.address+' '+r.wildcard+' area 0').join('\n'));
+    if (args[3]==='database') return rows('OSPF reachable advertisements',routeTable(lab,d).filter(r=>r.protocol==='ospf').map(r=>r.destination+'/'+r.prefix+' via '+r.next+' metric '+r.metric));
+    return reply(header+'\n'+d.ospf.networks.map(r=>' network '+r.address+' '+r.wildcard+' area '+(r.area??0)).join('\n'));
   }
   if (c.startsWith('show access-lists')||c.startsWith('show ip access-lists')) {
     const name=args.at(-1);
@@ -150,13 +159,15 @@ export function diagnostic(lab,d,s,args,c) {
 
 export function ospfConfig(d,s,args,c) {
   const p=d.ospf;
+  if(!p)return invalid('This OSPF process no longer exists.');
   if (c.startsWith('router-id ')&&validIp(args[1])) {p.routerId=args[1];return reply();}
   if (c.startsWith('network ')||c.startsWith('no network ')) {
     const remove=args[0]==='no';
     const [address,wildcard,,area]=args.slice(remove?2:1);
-    if (!validIp(address)||!validIp(wildcard)||!['0','0.0.0.0'].includes(area)) return invalid('Use an IPv4 wildcard and area 0.');
-    p.networks=p.networks.filter(rule=>rule.address!==address||rule.wildcard!==wildcard);
-    if (!remove) p.networks.push({address,wildcard});
+    const id=areaId(area);
+    if(!validIp(address)||!validIp(wildcard)||id===null)return invalid('Use an IPv4 wildcard and OSPF area number.');
+    p.networks=p.networks.filter(rule=>rule.address!==address||rule.wildcard!==wildcard||(remove&&(rule.area??0)!==id));
+    if(!remove)p.networks.push({address,wildcard,area:id});
     return reply();
   }
   if (c.includes('passive-interface')) {
@@ -170,19 +181,62 @@ export function ospfConfig(d,s,args,c) {
   if (c.startsWith('default-information originate')) {p.defaultRoute=args[2]==='always'?'always':true;return reply();}
   if (c==='no default-information originate') {delete p.defaultRoute;return reply();}
   if (c.startsWith('maximum-paths ')&&integer(args[1],1,16)) {p.maximumPaths=Number(args[1]);return reply();}
+  const no=args[0]==='no',w=no?args.slice(1):args;
+  if(w[0]==='area'){
+    const id=areaId(w[1]);
+    if(id===null)return invalid('Use a valid OSPF area ID.');
+    const area=(p.areas??={})[id]??={};
+    if(w[2]==='stub'){
+      if(!id)return invalid('The backbone cannot be a stub area.');
+      if(no&&w[3]!=='no-summary')delete area.stub;else if(!no)area.stub=true;
+      area.noSummary=!no&&w[3]==='no-summary';return reply();
+    }
+    if(w[2]==='authentication'){
+      if(no)delete area.authentication;else area.authentication='message-digest';return reply();
+    }
+    if(w[2]==='range'){
+      const [ip,mask,option,cost]=w.slice(3);
+      const prefix=prefixLength(mask);
+      if(!validIp(ip)||prefix===null||networkAddress(ip,prefix)!==ip||cost&&!integer(cost,1,16777215))return invalid('Enter a matching summary address and mask.');
+      area.ranges=(area.ranges??[]).filter(row=>row.address!==ip||row.prefix!==prefix);
+      if(!no)area.ranges.push({address:ip,prefix,noAdvertise:option==='not-advertise',cost:cost?Number(cost):undefined});
+      return reply();
+    }
+  }
+  if(w[0]==='redistribute'){
+    const protocol=w[1],process=protocol==='eigrp'?Number(w[2]):undefined;
+    const option=key=>{const i=w.indexOf(key);return i<0?undefined:w[i+1];};
+    const metric=option('metric'),type=option('metric-type'),tag=option('tag'),map=option('route-map');
+    if(process!==undefined&&!integer(w[2],1,65535)||metric&&!integer(metric,1,16777214)||type&&!['1','2'].includes(type)||
+      tag&&!integer(tag,0,4294967295)||map&&!validName(map))return invalid('Check the OSPF redistribution options.');
+    p.redistribute??={};
+    if(no)delete p.redistribute[protocol];
+    else p.redistribute[protocol]={process,metric:metric?Number(metric):undefined,type:type?Number(type):undefined,
+      tag:tag?Number(tag):undefined,map,subnets:w.includes('subnets')};
+    return reply();
+  }
   return invalid('Check the OSPF arguments.');
 }
 
 export function ospfPort(d,port,args,c) {
-  if (!c.startsWith('ip ospf ')&&!c.startsWith('bandwidth ')) return null;
+  if(!c.startsWith('ip ospf ')&&!c.startsWith('no ip ospf ')&&!c.startsWith('bandwidth ')) return null;
   const p=d.ports[port];
   const set=(key,value)=>{p.ospf??={};p.ospf[key]=value;return reply();};
   if (args[0]==='bandwidth'&&integer(args[1],1,100000000)) {p.bandwidth=Number(args[1]);return reply();}
   if (args[2]==='network') return set('network',args[3]);
-  if (args[3]==='area'&&integer(args[2],1,65535)&&['0','0.0.0.0'].includes(args[4])) {
+  if(c==='no ip ospf authentication'){if(p.ospf)delete p.ospf.authentication;return reply();}
+  if(c==='ip ospf authentication message-digest')return set('authentication','message-digest');
+  if(c.startsWith('no ip ospf message-digest-key ')){if(p.ospf?.keys)delete p.ospf.keys[args[4]];return reply();}
+  if(c.startsWith('ip ospf message-digest-key ')){
+    if(!integer(args[3],1,255))return invalid('Use an OSPF key ID from 1 to 255.');
+    p.ospf??={};p.ospf.keys??={};p.ospf.keys[args[3]]=args[5];return reply();
+  }
+  if(c.startsWith('no ip ospf ')&&args[4]==='area'){if(p.ospf){delete p.ospf.process;delete p.ospf.area;}return reply();}
+  if(args[3]==='area'&&integer(args[2],1,65535)&&areaId(args[4])!==null){
     const id=Number(args[2]);
     if (d.ospf&&d.ospf.id!==id) return invalid('This lab models one OSPF process per router.');
     d.ospf??={id,networks:[],passive:{}};
+    set('area',areaId(args[4]));
     return set('process',id);
   }
   const bounds={cost:['cost',1,65535],'hello-interval':['hello',1,65535],'dead-interval':['dead',1,65535],priority:['priority',0,255]};

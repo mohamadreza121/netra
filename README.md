@@ -2,7 +2,7 @@
 
 Learn. Simulate. Master.
 
-Netra is a browser-based networking education project for Cisco configuration practice. This foundation contains the landing page, the CCNA and CCNP topic roadmaps, and a LabSim preview with a selectable topology and sample console outputs.
+Netra is a browser-based networking education project for Cisco configuration practice. It includes CCNA and CCNP practice tracks and a topology editor with simulators for IOS-style, client, and service consoles.
 
 ## Run locally
 
@@ -15,6 +15,20 @@ python3 -m http.server 8000 --directory dist
 
 Open http://localhost:8000.
 
+## LabSim
+
+Open `/labsim/` and choose a preset or build a topology from an empty workspace. Choose a device to open its console. Use `?` for contextual help, Tab for keyword completion, and unambiguous abbreviations such as `sh ip int br` and `sh ip rout`. **Commands for this device → Live LabSim** lists the syntax available in each mode. Workspaces autosave in the browser and can be exported and imported as JSON.
+
+| Preset | Practice |
+| --- | --- |
+| Branch LAN | Access and trunk VLANs, router-on-a-stick, voice VLAN, and standalone Wi-Fi |
+| Enterprise Campus | CAPWAP, a Catalyst 9800-style wireless controller, WPA2-Enterprise, ISE RADIUS and TACACS+, wired 802.1X, DHCP relay, SIP, and eBGP |
+| Routing Core | GRE, multi-area OSPF, named and classic EIGRP, and route-map-controlled redistribution |
+
+The topology editor supports up to ten of each device type. The ISE and infrastructure server policy consoles use lab controls for their GUI workflows. The IOS-style consoles share a forwarding model for supported routes, VLANs, ACLs, tunnels, wireless clients, and endpoint services. IP SLA evaluates reachability on demand in the current topology. The models use JavaScript and require no firmware, image uploads, or backend dependencies.
+
+CCNP features that depend on additional platform models, such as MPLS L3VPN, DMVPN with IPsec, and SD-WAN, have guided scenarios at `/labsim/ccnp/`. A guided scenario uses its own modeled state and command sequence.
+
 ## Project structure
 
 | Path | Purpose |
@@ -22,11 +36,11 @@ Open http://localhost:8000.
 | `src/layout.mjs` | Shared navigation, page metadata, and footer |
 | `src/pages/` | Home, practice-track template, and LabSim workspace |
 | `src/features/practice/` | Track and topic definitions |
-| `src/features/labsim/` | Interactive topology and console preview |
+| `src/features/labsim/` | Topology, network behavior, and device consoles |
 | `src/styles/` | Brand palette, layouts, and responsive styles |
 | `src/assets/` | Netra mark and hardware artwork |
 | `src/motion.js` | Scroll-driven rack assembly and word transitions |
-| `scripts/build.mjs` | Generates four static routes in `dist/` |
+| `scripts/build.mjs` | Generates the static routes in `dist/` |
 | `docs/design-and-roadmap.md` | Brand directions and simulator and practice implementation plan |
 
 A static host can build with `npm run build` and publish `dist`.

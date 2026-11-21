@@ -1,4 +1,4 @@
-import { deviceById, linkUp, segment } from './network.js';
+import { deviceById, linkUp, primaryPort, segment } from './network.js';
 
 export function parseV6(text='') {
   if (!text.includes(':') || !/^[\da-f:]+$/i.test(text)) return null;
@@ -37,41 +37,49 @@ const base=(value,prefix)=>(value>>BigInt(128-prefix))<<BigInt(128-prefix);
 const same=(a,b,prefix)=>base(parseV6(a),prefix)===base(parseV6(b),prefix);
 export const networkV6=(address,prefix)=>formatV6(base(parseV6(address),prefix));
 
+export const uplinkV6=d=>d.host.wifi?'WiFi':primaryPort(d);
+const physical=(device,port)=>port==='WiFi'?primaryPort(device):port;
+const activePorts=device=>device.host.wifi?['WiFi']:Object.keys(device.ports);
 export function interfacesV6(device,port) {
-  const settings=device.ports[port];
-  if (!settings) return [];
+  const settings=device.ports[physical(device,port)];
+  if(!settings||settings.vrf)return [];
   const addresses=settings.ipv6??[];
   if (!(addresses.length||settings.ipv6Enabled)||addresses.some(a=>a.linkLocal)) return addresses;
-  return [...addresses,{address:'fe80::'+Number(device.id.slice(1)).toString(16)+':'+(Object.keys(device.ports).indexOf(port)+1).toString(16),prefix:64,linkLocal:true}];
+  return [...addresses,{address:'fe80::'+Number(device.id.slice(1)).toString(16)+':'+(Object.keys(device.ports).indexOf(physical(device,port))+1).toString(16),prefix:64,linkLocal:true}];
 }
 
 export function routesV6(lab,device) {
-  const connected=Object.keys(device.ports).flatMap(port=>linkUp(lab,device,port)?interfacesV6(device,port).filter(r=>!r.linkLocal).map(r=>({
+  const connected=activePorts(device).flatMap(port=>linkUp(lab,device,port)?interfacesV6(device,port).filter(r=>!r.linkLocal).map(r=>({
     port, prefix:r.prefix, destination:networkV6(r.address,r.prefix), address:r.address, distance:0
   })):[]);
   return [...connected,...(device.ipv6Routes??[]).flatMap(route=>{
-    const port=route.port??connected.find(c=>same(route.next,c.destination,c.prefix))?.port;
+    if(!route.ra&&route.port&&device.ports[route.port]?.vrf)return [];
+    const port=(route.port===primaryPort(device)&&device.host.wifi?'WiFi':route.port)??connected.find(c=>same(route.next,c.destination,c.prefix))?.port;
     return port&&linkUp(lab,device,port)?[{...route,port}]:[];
   })].sort((a,b)=>b.prefix-a.prefix||a.distance-b.distance);
 }
 
-function trace(lab, source, ip, from) {
+export function traceV6(lab,source,ip,from,learn=true) {
   let device=source;
   const path=[device.id];
   const visited=new Set();
+  let egress;
   while (!visited.has(device.id)) {
     visited.add(device.id);
-    const addresses=Object.keys(device.ports).flatMap(port=>linkUp(lab,device,port)?interfacesV6(device,port):[]);
-    if (addresses.some(address=>address.address===ip)) return {ok:true,device,from:from??ip,path};
+    const addresses=activePorts(device).flatMap(port=>linkUp(lab,device,port)?interfacesV6(device,port):[]);
+    if (addresses.some(address=>address.address===ip)) return {ok:true,device,from:from??ip,path,egress};
     if (source!==device && !device.ipv6Routing) break;
     const route=routesV6(lab,device).find(r=>same(ip,r.destination,r.prefix));
     if (!route) break;
     from??=interfacesV6(device,route.port).find(a=>!a.linkLocal)?.address;
     const next=route.next??ip;
+    egress??=route.port;
     const hit=segment(lab,device,route.port).find(n=>interfacesV6(n.device,n.port).some(a=>a.address===next));
     if (!hit || !from) break;
-    device.ndCache??={};
-    device.ndCache[next]={port:route.port,device:hit.device.id};
+    if(learn){
+      device.ndCache??={};
+      device.ndCache[next]={port:route.port,device:hit.device.id};
+    }
     device=hit.device;
     path.push(...hit.path.slice(1));
   }
@@ -80,9 +88,9 @@ function trace(lab, source, ip, from) {
 
 export function pingV6(lab,source,text) {
   const ip=formatV6(parseV6(text));
-  const forward=trace(lab,source,ip);
+  const forward=traceV6(lab,source,ip);
   if (!forward.ok) return forward;
-  const back=trace(lab,forward.device,forward.from);
+  const back=traceV6(lab,forward.device,forward.from);
   return back.ok?forward:{ok:false,reason:'No IPv6 return path. '+back.reason,path:forward.path};
 }
 

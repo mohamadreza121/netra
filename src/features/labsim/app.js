@@ -1,5 +1,8 @@
-import { addDevice, addLink, branchLab, deviceById, deviceLimit, emptyLab, endpoint, gateway, hostIp, hostPrefix, isHost, linkUp, models, peer, removeDevice, restoreLab, voiceVlan, wifiUp } from './network.js';
-import { commandHelp, commandSets, execute, prompt, syntax, terminalSession } from './cli.js';
+import { addDevice, addLink, branchLab, capacity, deviceById, deviceLimit, emptyLab, endpoint, gateway, hostIp, hostPrefix, isEndpoint, isHost, linkUp, models, peer, removeDevice, restoreLab, voiceVlan, wifiUp } from './network.js';
+import { routingLab } from './routing-lab.js';
+import { enterpriseLab } from './enterprise-lab.js';
+import { apController, wifiSession } from './wireless-controller.js';
+import { commandHelp, commandSets, consoleEcho, execute, prompt, syntax, terminalSession } from './cli.js';
 import { guidedEntries, guidedTopics } from './reference.js';
 
 const $=id=>document.getElementById(id);
@@ -15,7 +18,7 @@ const sessions=new Map();
 const histories=new Map();
 const recentCommands=new Map();
 let commandIndex;
-const palette={ up:'#7ce5b6',down:'#788983',wifi:'#9abef0',traffic:'#e7ff83' };
+const palette={ up:'#7ce5b6',down:'#788983',wifi:'#9abef0',control:'#cbb1ee',traffic:'#e7ff83' };
 let lab;
 let saved=true;
 let selected;
@@ -65,7 +68,7 @@ function draw() {
     const hot=traffic.some((id,i)=>(id===a.id&&traffic[i+1]===b.id)||(id===b.id&&traffic[i+1]===a.id));
     pen.strokeStyle=hot?palette.traffic:palette[kind];
     pen.lineWidth=hot?3:1.8;
-    pen.setLineDash(kind==='wifi'?[5,5]:kind==='down'?[3,5]:[]);
+    pen.setLineDash(kind==='wifi'?[5,5]:kind==='down'?[3,5]:kind==='control'?[1,5]:[]);
     pen.beginPath();
     pen.moveTo(a.x*width/100,a.y*height/100);
     pen.lineTo(b.x*width/100,b.y*height/100);
@@ -74,6 +77,10 @@ function draw() {
   for(const {a,b} of lab.links) {
     const left=deviceById(lab,a.device),right=deviceById(lab,b.device);
     line(left,right,linkUp(lab,left,a.port)?'up':'down');
+  }
+  for(const ap of lab.devices.filter(d=>d.type==='ap'&&d.capwap)){
+    const controller=apController(lab,ap);
+    if(controller)line(ap,controller,'control');
   }
   for(const host of lab.devices.filter(isHost)){
     const ap=wifiUp(lab,host);
@@ -170,7 +177,11 @@ function renderCables() {
 function setConsole(showHistory=false) {
   const d=active();
   $('sim-console-title').textContent=d?d.name+' console':'Device console';
-  $('sim-prompt').textContent=d?prompt(d,sessions.get(d.id)):'›';
+  const session=d&&sessions.get(d.id);
+  $('sim-prompt').textContent=d?prompt(d,session,lab):'›';
+  input.type=session?.passwordPrompt?'password':'text';
+  input.placeholder=session?.passwordPrompt?'Enter the lab password':'Type sh ip int br or ? for help';
+  input.setAttribute('aria-label',session?.passwordPrompt?'Lab password':'CLI command');
   input.disabled=!d;
   input.nextElementSibling.disabled=!d;
   $('sim-clear').disabled=!d;
@@ -186,16 +197,23 @@ function renderInspector() {
   $('sim-remove').disabled=!d;
   const items=[];
   if(d){
+    items.push(['Platform',models[d.type].platform]);
+    if(isEndpoint(d)&&d.type!=='wlc')items.push(['IPv4',hostIp(d)?hostIp(d)+'/'+hostPrefix(d):'Unassigned'],['Gateway',gateway(d)??'—']);
     if(isHost(d)) {
-      items.push(['IPv4',hostIp(d)?hostIp(d)+'/'+hostPrefix(d):'Unassigned'],['Gateway',gateway(d)??'—']);
-      const ap=wifiUp(lab,d);
-      if(ap)items.push(['Wi-Fi',ap.radio.ssid+' · '+ap.name]);
+      const network=wifiSession(lab,d);
+      if(network)items.push(['Wi-Fi',network.ssid+' · '+network.ap.name+(network.vlan?' · VLAN '+network.vlan:'')]);
       if(d.type==='phone')items.push(['Extension',d.host.extension??'Unassigned'],['Voice VLAN',voiceVlan(lab,d)??'—']);
     }
-    if(d.type==='ap')items.push(['Radio',d.radio.enabled?'On · '+d.radio.ssid:'Off'],['IPv4',hostIp(d)?hostIp(d)+'/'+hostPrefix(d):'Unassigned']);
+    if(d.type==='ap'){
+      items.push(['Radio',d.radio.enabled?(d.capwap?'On · managed':'On · '+d.radio.ssid):'Off']);
+      if(d.capwap)items.push(['CAPWAP',apController(lab,d)?.name??'Discovering controller']);
+    }
+    if(d.type==='ise')items.push(['Policy server',d.identity?.running?'Running':'Stopped']);
+    if(d.type==='server')items.push(['Services',Object.keys(d.services??{}).filter(key=>d.services[key]).map(key=>key.toUpperCase()).join(', ')||'Off']);
     for(const [name,p] of Object.entries(d.ports)){
       const far=peer(lab,d,name);
-      const attributes=d.type==='switch'?(p.mode==='trunk'?'trunk · native '+p.native:'VLAN '+p.vlan+(p.voice?' · voice '+p.voice:'')):
+      const attributes=(d.type==='switch'||d.type==='wlc')&&p.mode==='trunk'?'trunk · native '+p.native:
+        d.type==='switch'&&p.mode==='access'?'VLAN '+p.vlan+(p.voice?' · voice '+p.voice:''):
         p.address?p.address+'/'+p.prefix:'';
       items.push([name,[linkUp(lab,d,name)?'Up':p.up?'Down':'Shut',attributes,far?deviceById(lab,far.device).name+' '+far.port:''].filter(Boolean).join(' · ')]);
     }
@@ -203,9 +221,16 @@ function renderInspector() {
   $('sim-inspector').replaceChildren(...items.flatMap(([title,value])=>[element('dt',title),element('dd',value)]));
 }
 
-const modeLabels={user:'User EXEC',exec:'Privileged EXEC',global:'Global configuration',interface:'Interface',range:'Interface range',vlan:'VLAN configuration',pool:'DHCP pool',ospf:'OSPF process',acl:'Access list',endpoint:'Device console'};
+const modeLabels={user:'User EXEC',exec:'Privileged EXEC',global:'Global configuration',interface:'Interface',range:'Interface range',vlan:'VLAN configuration',pool:'DHCP pool',ospf:'OSPF process',acl:'Access list',endpoint:'Device console',
+  wlan:'WLAN profile',policy:'Wireless policy profile',tag:'Wireless policy tag',apConfig:'AP policy assignment',radius:'RADIUS server',tacacs:'TACACS+ server',
+  aaagroup:'AAA server group',line:'Console and VTY lines',bgp:'BGP process',bgpAf:'BGP address family',eigrp:'EIGRP process',
+  eigrpNamed:'Named EIGRP',eigrpAf:'EIGRP address family',eigrpInterface:'EIGRP interface',eigrpTopology:'EIGRP topology',
+  keyChain:'Key chain',keyChainKey:'Key chain entry',routeMap:'Route map',vrf:'VRF definition',vrfAf:'VRF address family',sla:'IP SLA operation',flowRecord:'Flow record',flowExporter:'Flow exporter',flowMonitor:'Flow monitor',pool6:'DHCPv6 pool',raGuard:'IPv6 RA Guard policy'};
 function renderReference() {
-  const d=active();
+  const device=active();
+  const session=device&&sessions.get(device.id);
+  const remote=session?.remote&&deviceById(lab,session.remote.id);
+  const d=remote??device;
   const target=$('sim-commands');
   target.replaceChildren();
   if(!d){target.append(element('p','Select a device.'));return;}
@@ -214,20 +239,27 @@ function renderReference() {
   function group(title,entries){
     if (!entries.length)return;
     const details=element('details');
-    details.open=Boolean(query)||title===modeLabels[sessions.get(d.id).mode]||title==='Quick examples';
+    details.open=Boolean(query)||title===modeLabels[(remote?session.remote.session:session).mode]||title==='Quick examples';
     details.append(element('summary',title));
     for(const entry of entries)details.append(entry);
     target.append(details);
   }
-  if($('sim-command-scope').value==='live'){
-    const sections=[...(d.type==='router'||d.type==='switch'?syntax.ios:[]),...syntax[d.type]];
+  const scope=$('sim-command-scope').value;
+  if(scope==='ccnp'){
+    const link=element('a','Open CCNP guided labs');
+    link.href='/labsim/ccnp/';
+    target.append(element('p','The guided console includes the CCNP lesson scenarios. Choose Live LabSim for the syntax available on this device.'),link);
+    return;
+  }
+  if(scope==='live'){
+    const sections=[...(models[d.type].ios?syntax.ios:[]),...(syntax[d.type]??[])];
     group('Quick examples',sections.filter(([title,cmd])=>matches(title+' '+cmd)).map(([title,cmd,note])=>{
       const row=element('div',undefined,'sim-ref-entry');
       row.append(element('h3',title),element('code',cmd),element('p',note));
       return row;
     }));
     for(const [mode,patterns] of Object.entries(commandSets[d.type])){
-      group(modeLabels[mode],[...new Set(patterns)].filter(pattern=>matches(pattern)||matches(modeLabels[mode])).map(pattern=>element('code',pattern,'sim-ref-command')));
+      group(modeLabels[mode]??mode,[...new Set(patterns)].filter(pattern=>matches(pattern)||matches(modeLabels[mode]??mode)).map(pattern=>element('code',pattern,'sim-ref-command')));
     }
   } else {
     const intro=element('p','Use this syntax in CCNA Practice when a guided lab is available.');
@@ -256,8 +288,8 @@ function logConsole(d,line,result) {
 }
 function showHelp(d) {
   const session=sessions.get(d.id);
-  const result=commandHelp(d,session,input.value);
-  logConsole(d,prompt(d,session)+' '+input.value+'?',result.text);
+  const result=commandHelp(d,session,input.value,lab);
+  logConsole(d,prompt(d,session,lab)+' '+input.value+'?',result.text);
   setConsole(true);
 }
 
@@ -274,14 +306,18 @@ function select(id) {
 }
 
 function renderCapacity(){
-  $('sim-count').textContent=lab.devices.length+' / 50 devices';
+  $('sim-count').textContent=lab.devices.length+' / '+capacity+' devices';
   for(const control of $('sim-add').children){
     const total=lab.devices.filter(d=>d.type===control.dataset.type).length;
     control.disabled=total>=deviceLimit;
     control.lastElementChild.textContent=total+'/'+deviceLimit;
   }
 }
-function refresh() {renderBoard();renderCables();renderCapacity();select(selected);}
+function refresh() {
+  $('sim-board-name').textContent={enterprise:'Enterprise Campus',routing:'Routing Core',branch:'Branch LAN'}[lab.scenario]??'Topology';
+  for(const panel of document.querySelectorAll('[data-lab-scenario]'))panel.hidden=panel.dataset.labScenario!==lab.scenario;
+  renderBoard();renderCables();renderCapacity();select(selected);
+}
 
 cableSelects.forEach((control,i)=>control.addEventListener('change',()=>portsFor(i)));
 $('sim-cables').addEventListener('submit',event=>{
@@ -301,17 +337,21 @@ for(const [type,model] of Object.entries(models)){
     } catch(error){say(error.message);}
   });
   control.dataset.type=type;
+  control.title=model.platform;
+  const icon=element('i',undefined,'sim-palette-icon');
+  icon.setAttribute('aria-hidden','true');
+  control.prepend(icon);
   control.append(element('small'));
   $('sim-add').append(control);
 }
 input.addEventListener('keydown',event=>{
   const d=active();
-  if(!d)return;
+  if(!d||sessions.get(d.id).passwordPrompt)return;
   if(event.key==='?'&&input.selectionStart===input.value.length&&input.value.split('"').length%2===1&&input.value.split("'").length%2===1){
     event.preventDefault();showHelp(d);return;
   }
   if(event.key==='Tab'&&!event.shiftKey&&input.selectionStart===input.value.length){
-    const help=commandHelp(d,sessions.get(d.id),input.value);
+    const help=commandHelp(d,sessions.get(d.id),input.value,lab);
     if(help.completed){
       event.preventDefault();input.value=help.completed;return;
     }
@@ -329,12 +369,16 @@ $('sim-console').addEventListener('submit',event=>{
   const command=input.value;
   if(!d||!command.trim())return;
   const s=sessions.get(d.id);
-  const before=prompt(d,s);
+  const before=prompt(d,s,lab);
+  const displayed=s.passwordPrompt?'[hidden]':consoleEcho(command);
+  const mode=s.remote?.session.mode??s.mode;
+  const remote=s.remote?.id;
   const commands=recentCommands.get(d.id)??[];
-  if(commands.at(-1)!==command)recentCommands.set(d.id,[...commands.slice(-39),command]);
+  if(displayed===command&&commands.at(-1)!==command)recentCommands.set(d.id,[...commands.slice(-39),command]);
   commandIndex=undefined;
   const result=execute(lab,d,s,command);
-  logConsole(d,before+' '+command,result.text);
+  logConsole(d,before+' '+displayed,result.text);
+  if(mode!==(s.remote?.session.mode??s.mode)||remote!==s.remote?.id)renderReference();
   traffic=result.path??[];
   save();
   renderInspector();
@@ -362,13 +406,27 @@ confirmDialog.addEventListener('close',()=>{
   if(confirmDialog.returnValue==='confirm')pendingAction?.();
   pendingAction=undefined;
 });
-function replace(next){
+function replace(next,label){
   lab=next;traffic=[];histories.clear();sessions.clear();recentCommands.clear();
   selected=lab.devices.find(d=>d.type==='pc')?.id??lab.devices[0]?.id;
-  refresh();save();say(lab.devices.length?'Branch LAN loaded.':'Empty lab created.');
+  refresh();save();say(label);
 }
-$('sim-starter').addEventListener('click',()=>requestChange('Load Branch LAN?','This replaces the current browser workspace. You can export it first.',()=>replace(branchLab())));
-$('sim-empty').addEventListener('click',()=>requestChange('Create an empty lab?','This replaces the current browser workspace. You can export it first.',()=>replace(emptyLab())));
+$('sim-enterprise').addEventListener('click',()=>requestChange('Load Enterprise Campus?','This replaces the current browser workspace. You can export it first.',()=>replace(enterpriseLab(),'Enterprise Campus loaded. Start with PC1 or select a command below the topology.')));
+for(const control of document.querySelectorAll('[data-lab-command]'))control.addEventListener('click',()=>{
+  const d=lab.devices.find(device=>device.name===control.dataset.device);
+  if(!d){say(control.dataset.device+' is unavailable in this workspace.');return;}
+  select(d.id);
+  const session=sessions.get(d.id);
+  if(session.remote||session.passwordPrompt){
+    say('Close the current SSH session or complete authentication first.');
+    return;
+  }
+  input.value=control.dataset.labCommand;
+  input.focus();
+});
+$('sim-routing').addEventListener('click',()=>requestChange('Load Routing Core?','This replaces the current browser workspace. You can export it first.',()=>replace(routingLab(),'Routing Core loaded. Test the GRE overlay and the routes exchanged across it.')));
+$('sim-starter').addEventListener('click',()=>requestChange('Load Branch LAN?','This replaces the current browser workspace. You can export it first.',()=>replace(branchLab(),'Branch LAN loaded.')));
+$('sim-empty').addEventListener('click',()=>requestChange('Create an empty lab?','This replaces the current browser workspace. You can export it first.',()=>replace(emptyLab(),'Empty lab created.')));
 $('sim-remove').addEventListener('click',()=>{
   const d=active();
   if(!d)return;
@@ -376,6 +434,17 @@ $('sim-remove').addEventListener('click',()=>{
     removeDevice(lab,d.id);sessions.delete(d.id);histories.delete(d.id);recentCommands.delete(d.id);traffic=[];selected=lab.devices[0]?.id;
     refresh();save();say(d.name+' removed.');
   });
+});
+$('sim-import').addEventListener('click',()=>$('sim-import-file').click());
+$('sim-import-file').addEventListener('change',async event=>{
+  const file=event.target.files?.[0];
+  event.target.value='';
+  if(!file)return;
+  try {
+    if(file.size>8_000_000)throw Error('The LabSim JSON file is too large.');
+    const next=restoreLab(await file.text());
+    requestChange('Import this workspace?','This replaces the current browser workspace. You can export it first.',()=>replace(next,'Workspace imported.'));
+  }catch(error){say('Import failed. '+error.message);}
 });
 $('sim-export').addEventListener('click',()=>{
   const url=URL.createObjectURL(new Blob([JSON.stringify(lab,null,2)],{type:'application/json'}));

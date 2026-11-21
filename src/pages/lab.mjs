@@ -1,23 +1,44 @@
+import { capacity, deviceLimit } from '../features/labsim/platforms.js';
+
 export function lab() {
   return `<section class="sim-heading"><div class="frame">
-  <div><p class="eyebrow">NETRA LABSIM</p><h1>Build a network<span>.</span></h1><p>Connect devices, configure their ports, and test how traffic moves.</p></div>
-  <div class="sim-project"><p id="sim-count">0 / 50 devices</p><small>Up to 10 of each type</small></div>
+  <div><p class="eyebrow">NETRA LABSIM</p><h1>Build a network<span>.</span></h1><p>Build a topology, configure its devices, and see where traffic succeeds or fails.</p></div>
+  <div class="sim-project"><p id="sim-count">0 / ${capacity} devices</p><small>Up to ${deviceLimit} of each type</small></div>
 </div></section>
 <section class="sim-workspace frame" aria-label="Network simulator">
   <div class="sim-tools">
     <div id="sim-add" class="sim-add" aria-label="Add devices"></div>
-    <div class="sim-actions"><a class="sim-button" href="/labsim/ccnp/">CCNP guided labs</a><button type="button" id="sim-export" class="sim-button">Export JSON</button><button type="button" id="sim-starter" class="sim-button">Load Branch LAN</button><button type="button" id="sim-empty" class="sim-button">New empty lab</button></div>
+    <div class="sim-actions"><button type="button" id="sim-enterprise" class="sim-button sim-accent">Load Enterprise Campus</button><button type="button" id="sim-routing" class="sim-button">Load Routing Core</button><a class="sim-button" href="/labsim/ccnp/">CCNP guided labs</a><button type="button" id="sim-export" class="sim-button">Export JSON</button><button type="button" id="sim-import" class="sim-button">Import JSON</button><input id="sim-import-file" type="file" accept=".json,application/json" hidden><button type="button" id="sim-starter" class="sim-button">Load Branch LAN</button><button type="button" id="sim-empty" class="sim-button">New empty lab</button></div>
   </div>
   <p id="sim-status" role="status" class="sim-status"></p>
   <div class="sim-grid">
     <div class="sim-core">
       <section class="sim-panel" aria-label="Network topology">
-        <div class="sim-bar"><h2>Topology</h2><span id="sim-save">Browser workspace</span></div>
+        <div class="sim-bar"><h2 id="sim-board-name">Topology</h2><span id="sim-save">Browser workspace</span></div>
         <div class="sim-board-scroll" tabindex="0" aria-label="Topology canvas scrolling area">
           <div id="sim-board" class="sim-board"><canvas id="sim-lines" aria-hidden="true"></canvas><div id="sim-nodes"></div><p id="sim-board-empty">Add devices to begin.</p></div>
         </div>
-        <div class="sim-legend"><span><i></i> Ethernet up</span><span><i></i> Down</span><span><i></i> Wi-Fi</span><span><i></i> Last traffic path</span></div>
+        <div class="sim-legend"><span><i></i> Ethernet up</span><span><i></i> Down</span><span><i></i> Wi-Fi</span><span><i></i> Last traffic path</span><span><i></i> CAPWAP</span></div>
       </section>
+      <details class="sim-panel sim-help sim-scenario" data-lab-scenario="enterprise" hidden open>
+        <summary>Test the Enterprise Campus</summary>
+        <ol>
+          <li>On <b>PC1</b>, <button type="button" data-device="PC1" data-lab-command="wifi join Netra-Enterprise enterprise student NetraStudent">join the enterprise WLAN</button>, <button type="button" data-device="PC1" data-lab-command="ipconfig /renew">request DHCP</button>, and <button type="button" data-device="PC1" data-lab-command="ping provider.netra.test">ping the BGP-learned destination</button>.</li>
+          <li>On <b>PC2</b>, <button type="button" data-device="PC2" data-lab-command="dot1x login student NetraStudent">authenticate over wired 802.1X</button>, then <button type="button" data-device="PC2" data-lab-command="ipconfig /renew">request DHCP</button>. Review the <button type="button" data-device="ISE1" data-lab-command="show radius live-logs">RADIUS log on ISE1</button>.</li>
+          <li>On <b>TEL1</b>, <button type="button" data-device="TEL1" data-lab-command="dial 2002">dial TEL2</button>. Review the <button type="button" data-device="SRV1" data-lab-command="show sip registrations">registrations on SRV1</button>.</li>
+          <li>On <b>R1</b>, <button type="button" data-device="R1" data-lab-command="sh ip bgp sum">check eBGP</button>. Shut down <code>Gi0/1</code> and retry the provider ping. Use <code>no shutdown</code> to restore the peering.</li>
+        </ol>
+        <p>Choose a command to load it into the console, then press Enter.</p>
+      </details>
+      <details class="sim-panel sim-help sim-scenario" data-lab-scenario="routing" hidden open>
+        <summary>Test the Routing Core</summary>
+        <ol>
+          <li>On <b>R1</b>, <button type="button" data-device="R1" data-lab-command="show tunnel interface tunnel72">inspect the GRE tunnel</button>, then <button type="button" data-device="R1" data-lab-command="show ip ospf neighbor">confirm the OSPF adjacency</button> and <button type="button" data-device="R1" data-lab-command="show ip route ospf">check inter-area and external routes</button>.</li>
+          <li>On <b>R3</b>, <button type="button" data-device="R3" data-lab-command="show ip eigrp topology">inspect EIGRP</button>. Check the <button type="button" data-device="R3" data-lab-command="show route-map IMPORT-EDGE">redistribution policy</button> for the loopback advertised by R4.</li>
+          <li>On <b>PC1</b>, <button type="button" data-device="PC1" data-lab-command="ping 10.72.90.4">ping the R4 loopback</button>. Change R3’s tunnel key to <code>73</code> and retry. Restore it to <code>72</code> to bring back the adjacency and route.</li>
+        </ol>
+        <p>Choose a command to load it into the console, then press Enter.</p>
+      </details>
       <section class="sim-panel sim-console" aria-label="Device console">
         <div class="sim-bar"><h2 id="sim-console-title">Device console</h2><button class="sim-button" type="button" id="sim-clear">Clear</button></div>
         <pre id="sim-output" role="log" tabindex="0" aria-label="Command output"></pre>
@@ -29,7 +50,7 @@ export function lab() {
       <section class="sim-panel" aria-label="Selected device">
         <div class="sim-bar"><h2 id="sim-inspector-title">Device</h2><button type="button" id="sim-remove" class="sim-button">Remove</button></div>
         <dl id="sim-inspector" class="sim-inspector"></dl>
-        <details class="sim-reference"><summary>Commands for this device</summary><div class="sim-ref-controls"><label>Find a command<input id="sim-command-search" type="search" placeholder="e.g. ospf, trunk, ssid"></label><label>Coverage<select id="sim-command-scope"><option value="live">Live LabSim</option><option value="guided">CCNA study reference</option></select></label></div><div id="sim-commands"></div></details>
+        <details class="sim-reference"><summary>Commands for this device</summary><div class="sim-ref-controls"><label>Find a command<input id="sim-command-search" type="search" placeholder="e.g. ospf, trunk, ssid"></label><label>Coverage<select id="sim-command-scope"><option value="live">Live LabSim</option><option value="guided">CCNA study reference</option><option value="ccnp">CCNP guided labs</option></select></label></div><div id="sim-commands"></div></details>
       </section>
       <section class="sim-panel" aria-label="Cable connections">
         <div class="sim-bar"><h2>Cables</h2></div>
@@ -40,11 +61,11 @@ export function lab() {
         </form>
         <ul id="sim-links" class="sim-links"></ul>
       </section>
-      <details class="sim-panel sim-help"><summary>Try the starter network</summary><ol>
+      <details class="sim-panel sim-help" data-lab-scenario="branch" hidden><summary>Try the starter network</summary><ol>
         <li>Select <b>PC1</b> and run <code>ping 192.168.20.21</code> to reach the IP phone across the staff and voice VLANs.</li>
         <li>On <b>SW1</b>, enter <code>enable</code>, <code>configure terminal</code>, <code>interface gi0/3</code>, then <code>shutdown</code>. Repeat the PC ping and compare the result. Use <code>no shutdown</code> to restore the port.</li>
         <li>Add a PC, select it, and run <code>wifi join Netra-Staff NetraLab26</code>, then <code>ipconfig /renew</code> and <code>ping 192.168.10.1</code>.</li>
-      </ol><p>The starter network includes dummy credentials. LabSim uses a Cisco-style CLI for routers and switches and a dedicated AP CLI for the simulated radio. The command list shows which syntax runs in this workspace.</p></details>
+      </ol><p>The starter network uses lab credentials. Open Commands for this device to see the syntax available in the live console.</p></details>
     </aside>
   </div>
   <dialog id="sim-confirm"><form method="dialog"><h2 id="sim-confirm-title">Replace this workspace?</h2><p id="sim-confirm-copy"></p><div><button class="sim-button" value="cancel" autofocus>Cancel</button><button class="sim-button sim-accent" value="confirm">Continue</button></div></form></dialog>

@@ -1,3 +1,4 @@
+import { apController, profiles, wifiSession } from './wireless-controller.js';
 import { linkUp, models, requestDhcp, wifiUp, isHost, hostIp, hostPrefix, gateway, macAddress } from './network.js';
 import { integer, validVlan, reply, invalid, validIp } from './ios.js';
 import { prefixLength } from './network.js';
@@ -13,6 +14,7 @@ function running(d) {
     'radio '+on(d.radio.enabled),'radio band '+apBand(d),'radio channel '+(d.radio.channel??'auto'),
     'radio width '+(d.radio.width??20),'radio power '+(d.radio.power??17),
     'ssid broadcast '+on(d.radio.broadcast!==false),'client isolation '+on(d.radio.isolation),
+    ...(d.capwap?[d.capwap.primary?'capwap ap primary-base '+d.capwap.primary+' '+d.capwap.address:'capwap ap controller ip address '+d.capwap.address]:[]),
     ...(d.radio.vlan?['ssid vlan '+d.radio.vlan]:[]),
     'interface ethernet 0',d.ports.Eth0.up?' no shutdown':' shutdown',
     ...(d.host.ip?[' ip address '+d.host.ip+' '+d.host.prefix]:d.host.lease?[' ip address dhcp']:[]),
@@ -56,11 +58,14 @@ export function accessPoint(lab,d,args,connectivity) {
   if (c==='no ssid vlan') {delete radio.vlan;return reply();}
   if (c.startsWith('ssid broadcast ')) {radio.broadcast=target==='on';return reply();}
   if (c.startsWith('client isolation ')) {radio.isolation=target==='on';return reply();}
-  if (c==='show wireless clients') return reply(clients(lab,d).map(client=>`${client.name.padEnd(12)}${macAddress(client)}  ${hostIp(client)??'unassigned'}`).join('\n')||'No associated clients.');
+  if (c==='show wireless clients') return reply(clients(lab,d).map(client=>`${client.name.padEnd(12)}${macAddress(client)}  ${hostIp(client)??'unassigned'}  ${wifiSession(lab,client).ssid}`).join('\n')||'No associated clients.');
   if (c.startsWith('show wireless')) return reply([
     `Radio: ${on(radio.enabled)} · ${apBand(d)} GHz · Channel ${apChannel(d)} · ${radio.width??20} MHz · ${radio.power??17} dBm`,
-    `SSID: ${radio.ssid} · ${radio.broadcast===false?'hidden':'broadcast'}`,`Security: ${radio.key?'WPA2-PSK':'Open'}`,
-    `Client VLAN: ${radio.vlan??'untagged'} · Isolation: ${on(radio.isolation)}`,
+        ...(d.capwap?[
+      'CAPWAP: '+(apController(lab,d)?.name??'Discovery'),
+      ...profiles(lab,d).map(wlan=>'SSID: '+wlan.ssid+' · VLAN '+(wlan.vlan??'native')+' · '+(wlan.bridge.type==='wlc'?'Central':'Local')+' · '+wlan.security.toUpperCase())
+    ]:[`SSID: ${radio.ssid} · ${radio.broadcast===false?'hidden':'broadcast'}`,`Security: ${radio.key?'WPA2-PSK':'Open'}`,
+      `Client VLAN: ${radio.vlan??'untagged'} · Isolation: ${on(radio.isolation)}`]),
     `Ethernet: ${linkUp(lab,d,'Eth0')?'up':'down'}`,
     `Clients: ${clients(lab,d).map(x=>x.name).join(', ')||'none'} / ${radio.maxClients??50}`].join('\n'));
   if (c==='show running-config') return reply(running(d));

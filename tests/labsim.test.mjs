@@ -18,7 +18,7 @@ test('each device type has ten slots and Ethernet ports accept one cable', () =>
     for (let i = 0; i < 10; i++) addDevice(lab, type);
     assert.throws(() => addDevice(lab, type), /Limit reached/);
   }
-  assert.equal(lab.devices.length, 50);
+  assert.equal(lab.devices.length,80);
   const first = lab.devices[0];
   const sw = lab.devices[10];
   cable(lab, first, 'Gi0/0', sw, 'Gi0/1');
