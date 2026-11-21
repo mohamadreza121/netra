@@ -1,3 +1,9 @@
+import { ospfRoutes } from './ospf.js';
+import { permitsPing } from './acl.js';
+import { bridgeState, permitsSwitchIngress } from './switching.js';
+import { natIn, natOut } from './nat.js';
+import { acceptsDhcpOffer, inspectArp, learnDhcp } from './layer2-security.js';
+
 export const deviceLimit = 10;
 export const models = {
   router: { title:'Router', prefix:'R', ports:['Gi0/0','Gi0/1','Gi0/2','Gi0/3'], icon:'router' },
@@ -98,19 +104,24 @@ export function prefixLength(value) {
   return null;
 }
 const network = (ip,length) => (ipv4(ip)&mask(length))>>>0;
-const inSubnet = (ip, address, length) => ipv4(ip)!==null && ipv4(address)!==null && network(ip,length)===network(address,length);
+export const inSubnet = (ip, address, length) => ipv4(ip)!==null && ipv4(address)!==null && network(ip,length)===network(address,length);
 export const networkAddress = (ip,length) => dotted(network(ip,length));
 export const hostIp = d => d.host.lease?.ip ?? d.host.ip;
 export const hostPrefix = d => d.host.lease?.prefix ?? d.host.prefix;
 export const gateway = d => d.host.lease?.gateway ?? d.host.gateway;
 
-const parentPort = port => port.split('.')[0];
+export const parentPort = port => port.split('.')[0];
 export function linkUp(lab,d,name) {
   const local=d.ports[name];
-  if (!local?.up) return false;
+  if (!local?.up||local.security?.disabled) return false;
+  if (name.startsWith('Lo')) return true;
+  if (name.startsWith('Vlan')) {
+    const id=Number(name.slice(4));
+    return vlanExists(d,id)&&models.switch.ports.some(port=>linkUp(lab,d,port)&&vlanEgress(d.ports[port],id)!==undefined);
+  }
   const port=parentPort(name);
   const remote=peer(lab,d,port);
-  return Boolean(d.ports[port]?.up&&remote&&deviceById(lab,remote.device)?.ports[remote.port]?.up);
+  return Boolean(d.ports[port]?.up&&remote&&deviceById(lab,remote.device)?.ports[remote.port]?.up&&!deviceById(lab,remote.device)?.ports[remote.port]?.security?.disabled);
 }
 
 export function wifiUp(lab,host) {
@@ -121,24 +132,28 @@ export function wifiUp(lab,host) {
 export function joinWifi(lab,host,ssid,key) {
   const ap=lab.devices.find(d=>d.type==='ap'&&d.radio.enabled&&d.radio.ssid===ssid&&d.radio.key===key);
   if(!ap)return false;
+  const clients=lab.devices.filter(d=>d!==host&&isHost(d)&&wifiUp(lab,d)===ap);
+  if (clients.length>=(ap.radio.maxClients??50)) return false;
   host.host.wifi={ap:ap.id,ssid,key};
   delete host.host.lease;
   return true;
 }
 
-const vlanExists = (d,vlan) => Object.hasOwn(d.vlans,vlan);
+export const vlanExists = (d,vlan) => Object.hasOwn(d.vlans,vlan) && !d.inactiveVlans?.includes(vlan);
 const permits = (port,vlan) => !port.allowed || port.allowed.includes(vlan);
 
-function ingress(port,tag) {
+export function vlanIngress(port,tag) {
   if(port.mode==='trunk') {
     const vlan=tag??port.native;
     return permits(port,vlan)?vlan:null;
   }
+  if(port.mode==='routed')return null;
   return tag===null?port.vlan:tag===port.voice?tag:null;
 }
 
-function egress(port,vlan) {
+export function vlanEgress(port,vlan) {
   if(port.mode==='trunk')return permits(port,vlan)?(vlan===port.native?null:vlan):undefined;
+  if(port.mode==='routed')return undefined;
   if(port.voice===vlan)return vlan;
   return port.vlan===vlan?null:undefined;
 }
@@ -151,26 +166,35 @@ export function voiceVlan(lab,d) {
   return device?.type==='switch'&&port?.mode==='access'?port.voice??null:null;
 }
 
-export function segment(lab,source,port) {
+export const macAddress = d => '0200.0000.'+Number(d.id.slice(1)).toString(16).padStart(4,'0');
+
+export function segment(lab,source,port,learn=false,traffic='arp') {
   const results=new Map();
   const seen=new Set();
   const queue=[];
-  const push=(device,entry,tag,path)=> {
-    const key=JSON.stringify([device.id,entry,tag]);
-    if(!seen.has(key)){seen.add(key); queue.push({device,entry,tag,path});}
+  const learned=new Set();
+  const tree=new Map();
+  const forwards=(device,port,vlan)=>{
+    if (!tree.has(vlan)) tree.set(vlan,bridgeState(lab,vlan));
+    const role=tree.get(vlan).get(device.id)?.ports[port];
+    return !['Altn','suspended','err-disabled'].includes(role);
   };
-  const transmit=(device,name,tag,path)=>{
+  const push=(device,entry,tag,path,hops)=> {
+    const key=JSON.stringify([device.id,entry,tag]);
+    if(!seen.has(key)){seen.add(key); queue.push({device,entry,tag,path,hops});}
+  };
+  const transmit=(device,name,tag,path,hops=[])=>{
     if(!linkUp(lab,device,name))return;
     const remote=peer(lab,device,parentPort(name));
     const target=deviceById(lab,remote.device);
-    push(target,remote.port,tag,path.concat(target.id));
+    push(target,remote.port,tag,path.concat(target.id),hops);
   };
-  const receive=(device,name,path)=>{
-    if(device!==source&&!results.has(device.id+':'+name))results.set(device.id+':'+name,{device,port:name,path});
+  const receive=(device,name,path,hops=[])=>{
+    if(device!==source&&!results.has(device.id+':'+name))results.set(device.id+':'+name,{device,port:name,path,hops});
   };
-  const wireless=(ap,path)=>{
+  const wireless=(ap,path,hops=[])=>{
     for(const host of lab.devices.filter(isHost)) {
-      if(wifiUp(lab,host)===ap) receive(host,'WiFi',path.concat(host.id));
+      if(wifiUp(lab,host)===ap) receive(host,'WiFi',path.concat(host.id),hops);
     }
   };
 
@@ -178,106 +202,147 @@ export function segment(lab,source,port) {
     const ap=wifiUp(lab,source);
     if(!ap)return [];
     const path=[source.id,ap.id];
-    wireless(ap,path);
-    transmit(ap,'Eth0',null,path);
+    if (!ap.radio.isolation) wireless(ap,path);
+    transmit(ap,'Eth0',ap.radio.vlan??null,path);
+  } else if (port.startsWith('Vlan')) {
+    const vlan=Number(port.slice(4));
+    if (linkUp(lab,source,port)) for (const name of models.switch.ports) {
+      const tag=vlanEgress(source.ports[name],vlan);
+      if (tag!==undefined&&forwards(source,name,vlan)) transmit(source,name,tag,[source.id]);
+    }
   } else {
-    transmit(source,port,isHost(source)?voiceVlan(lab,source):source.ports[port]?.tag??null,[source.id]);
+    transmit(source,port,isHost(source)?voiceVlan(lab,source):source.ports[port]?.nativeEncapsulation?null:source.ports[port]?.tag??null,[source.id]);
   }
-  for(const {device,entry,tag,path} of queue) {
+  for(const {device,entry,tag,path,hops} of queue) {
     if(device.type==='switch') {
-      const vlan=ingress(device.ports[entry],tag);
-      if(vlan===null||!vlanExists(device,vlan))continue;
+      if(device.ports[entry].mode==='routed') {
+        if(tag===null)receive(device,entry,path,hops);
+        continue;
+      }
+      const vlan=vlanIngress(device.ports[entry],tag);
+      if(vlan===null||!vlanExists(device,vlan)||!forwards(device,entry,vlan)||(learn&&!permitsSwitchIngress(device,entry,source))||(learn&&traffic==='arp'&&!inspectArp(device,entry,vlan,source)))continue;
+      if (learn&&!learned.has(device.id+':'+vlan)) {
+        learned.add(device.id+':'+vlan);
+        device.macTable??={};
+        device.macTable[vlan+':'+macAddress(source)]={vlan,mac:macAddress(source),port:entry};
+      }
+      if (device.ports['Vlan'+vlan]?.up) receive(device,'Vlan'+vlan,path,hops);
       for(const name of models.switch.ports) {
         if(name===entry)continue;
-        const outgoing=egress(device.ports[name],vlan);
-        if(outgoing!==undefined) transmit(device,name,outgoing,path);
+        const outgoing=vlanEgress(device.ports[name],vlan);
+        if(outgoing!==undefined&&forwards(device,name,vlan)) transmit(device,name,outgoing,path,learn&&traffic==='dhcp'?[...hops,{device,port:entry,egress:name,vlan}]:hops);
       }
     } else if(device.type==='ap') {
-      if(tag===null&&device.radio.enabled) wireless(device,path);
+      if (tag===null) receive(device,entry,path,hops);
+      if (tag===(device.radio.vlan??null) && device.radio.enabled) wireless(device,path,hops);
     } else if(device.type==='router') {
       for(const [name,p] of Object.entries(device.ports)) {
-        if(parentPort(name)===entry && (p.tag??null)===tag && p.up) receive(device,name,path);
+        if(parentPort(name)===entry && (p.nativeEncapsulation?null:p.tag??null)===tag && p.up && (tag!==null || name!==entry || !Object.entries(device.ports).some(([other,value])=>parentPort(other)===entry && value.nativeEncapsulation))) receive(device,name,path,hops);
       }
     } else if(isHost(device) && !device.host.wifi && voiceVlan(lab,device)===tag) {
-      receive(device,entry,path);
+      receive(device,entry,path,hops);
     }
   }
   return [...results.values()];
 }
 
-const addresses = d=>d.type==='router'
-  ? Object.values(d.ports).map(p=>p.address).filter(Boolean)
-  : [hostIp(d)].filter(Boolean);
-const interfaceIp = (d,port)=>d.type==='router'?d.ports[port].address:hostIp(d);
+const addresses = d=>[...Object.values(d.ports).map(p=>p.address),hostIp(d)].filter(Boolean);
+export const interfaceIp = (d,port)=>d.ports[port]?.address??(d.type==='switch'||d.type==='router'?undefined:hostIp(d));
+
+export function connectedRoutes(lab,d) {
+  return Object.entries(d.ports)
+    .filter(([name,p])=>p.address&&linkUp(lab,d,name))
+    .map(([port,p])=>({port,prefix:p.prefix,destination:networkAddress(p.address,p.prefix),distance:0,protocol:'connected'}));
+}
+
+export function staticRoutes(lab,d) {
+  const connected=connectedRoutes(lab,d);
+  return d.routes.flatMap(route=>{
+    const next=route.port?(linkUp(lab,d,route.port)&&d.ports[route.port].address?route.port:undefined):
+      connected.filter(r=>inSubnet(route.next,r.destination,r.prefix)).sort((a,b)=>b.prefix-a.prefix)[0]?.port;
+    return next?[{...route,port:next,protocol:'static'}]:[];
+  });
+}
 
 export function routeTable(lab,d) {
-  const connected=Object.entries(d.ports)
-    .filter(([name,p])=>p.address&&linkUp(lab,d,name))
-    .map(([port,p])=>({port,prefix:p.prefix,destination:networkAddress(p.address,p.prefix),distance:0}));
-  const routes=connected.slice();
-  for(const route of d.routes) {
-    const next=connected.filter(r=>inSubnet(route.next,r.destination,r.prefix)).sort((a,b)=>b.prefix-a.prefix)[0];
-    if(next)routes.push({...route,port:next.port});
-  }
+  const routes=[...connectedRoutes(lab,d),...staticRoutes(lab,d),...ospfRoutes(lab,d,staticRoutes)];
   const best=new Map();
   for (const r of routes) {
     const key=r.destination+'/'+r.prefix;
-    if (!best.has(key)||r.distance<best.get(key).distance)best.set(key,r);
+    if (!best.has(key)||r.distance<best.get(key).distance||(r.distance===best.get(key).distance&&(r.metric??0)<(best.get(key).metric??0)))best.set(key,r);
   }
   return [...best.values()].sort((a,b)=>b.prefix-a.prefix);
 }
 
-export function traceIp(lab,source,ip) {
+export function traceIp(lab,source,ip,originalSource,icmp='echo',learn=false,originatingHost) {
   if(ipv4(ip)===null)return {ok:false,reason:'Enter a valid IPv4 address.',path:[source.id]};
   let here=source;
   const visited=new Set();
   const path=[source.id];
-  let origin;
+  let origin=originalSource;
+  let incoming;
   while(!visited.has(here.id)) {
-    if(addresses(here).includes(ip))return {ok:true,destination:here,source:origin??ip,path};
+    if (incoming && !permitsPing(here,incoming,'in',origin,ip,icmp)) return {ok:false,reason:here.name+': inbound access list denied ICMP.',path};
+    if(learn&&here.ports[incoming]?.nat==='outside')ip=natIn(here,ip,origin,originatingHost);
+    if(addresses(here).includes(ip))return {ok:true,destination:here,source:origin??ip,target:ip,path};
     visited.add(here.id);
     let port;
     let next;
-    if(here.type==='router') {
+    if((here.type==='router'&&here.ipv4Routing!==false)||(here.type==='switch'&&here.ipv4Routing)) {
       const route=routeTable(lab,here).find(r=>inSubnet(ip,r.destination,r.prefix));
       if(!route)return {ok:false,reason:`${here.name}: no route to ${ip}.`,path};
       port=route.port;
       next=route.next??ip;
       origin??=here.ports[port].address;
-    } else if(isHost(here)) {
-      const address=hostIp(here);
-      if(!address)return {ok:false,reason:`${here.name}: configure an IPv4 address or request DHCP.`,path};
+    } else if(isHost(here)||here.type==='ap'||here.type==='switch') {
+      const management=Object.entries(here.ports).find(([name,p])=>p.address&&linkUp(lab,here,name));
+      const address=management?.[1].address??hostIp(here);
+      if(!address || here!==source)return {ok:false,reason:`${here.name}: configure an IPv4 address or request DHCP.`,path};
       origin??=address;
-      port=here.host.wifi?'WiFi':'Eth0';
-      next=inSubnet(ip,address,hostPrefix(here))?ip:gateway(here);
+      port=management?.[0]??(here.host.wifi?'WiFi':'Eth0');
+      next=inSubnet(ip,address,management?.[1].prefix??hostPrefix(here))?ip:gateway(here);
       if(!next)return {ok:false,reason:`${here.name}: no default gateway for ${ip}.`,path};
     } else {
       return {ok:false,reason:`${here.name} is a Layer 2 device in this model.`,path};
     }
-    const neighbor=segment(lab,here,port).find(result=>interfaceIp(result.device,result.port)===next);
+    if (learn&&here.ports[incoming]?.nat==='inside'&&here.ports[port]?.nat==='outside')origin=natOut(here,origin,ip,icmp);
+    if (!permitsPing(here,port,'out',origin,ip,icmp)) return {ok:false,reason:here.name+': outbound access list denied ICMP.',path};
+    const neighbor=segment(lab,here,port,learn).find(result=>interfaceIp(result.device,result.port)===next);
     if(!neighbor)return {ok:false,reason:`${here.name}: could not resolve next hop ${next} on ${port}. Check link, VLAN and addressing.`,path};
+    if (learn) {
+      here.arp??={};
+      here.arp[next]={mac:macAddress(neighbor.device),port,device:neighbor.device.id};
+    }
     path.push(...neighbor.path.slice(1));
     here=neighbor.device;
+    incoming=neighbor.port;
   }
   return {ok:false,reason:'Routing loop detected.',path};
 }
 
 export function ping(lab,source,ip) {
-  const forward=traceIp(lab,source,ip);
+  const forward=traceIp(lab,source,ip,undefined,'echo',true);
   if(!forward.ok)return forward;
-  const back=traceIp(lab,forward.destination,forward.source);
+  const sourceAddress=source.type==='router'?undefined:hostIp(source);
+  const back=traceIp(lab,forward.destination,forward.source,forward.target,'echo-reply',true,sourceAddress);
   return back.ok?forward:{ok:false,reason:'No return path. '+back.reason,path:forward.path};
 }
 
 export function requestDhcp(lab,host) {
   if(host.host.lease)delete host.host.lease;
   const from=host.host.wifi?'WiFi':'Eth0';
-  const neighbors=segment(lab,host,from).filter(n=>n.device.type==='router');
+  const neighbors=segment(lab,host,from,true,'dhcp').filter(n=>n.device.type==='router');
   const occupied=new Set(lab.devices.filter(d=>d!==host).flatMap(addresses));
-  for(const {device,port,path} of neighbors) {
-    const address=device.ports[port].address;
+  for(const {device:relay,port,path:localPath,hops} of neighbors) {
+    const address=relay.ports[port].address;
+    const helper=relay.ports[port].helper;
+    const server=helper?traceIp(lab,relay,helper,address):null;
+    if (helper&&(!server?.ok||server.destination.type!=='router'||!traceIp(lab,server.destination,address,helper).ok)) continue;
+    const device=server?.destination??relay;
+    if (device.dhcpDisabled) continue;
+    const path=server?[...localPath,...server.path.slice(1)]:localPath;
     const pool=Object.values(device.pools).find(p=>inSubnet(address,p.network,p.prefix));
-    if(!pool||pool.prefix>=31)continue;
+    if(!pool||pool.prefix>=31||hops.some(h=>!acceptsDhcpOffer(h.device,h.egress,h.vlan)))continue;
     const start=network(pool.network,pool.prefix);
     const last=start+2**(32-pool.prefix)-1;
     const excluded=device.excluded.map(range=>range.map(ipv4));
@@ -286,7 +351,8 @@ export function requestDhcp(lab,host) {
       if(range){n=range[1];continue;}
       const ip=dotted(n);
       if(occupied.has(ip))continue;
-      host.host.lease={ip,prefix:pool.prefix,gateway:pool.gateway,server:device.id};
+      host.host.lease={ip,prefix:pool.prefix,gateway:pool.gateway,server:device.id,dns:pool.dns,domain:pool.domain};
+      for(const h of hops)learnDhcp(h.device,h.port,h.vlan,host,ip);
       return {ok:true,path,ip,server:device.name};
     }
   }

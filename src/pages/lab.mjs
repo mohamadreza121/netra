@@ -21,14 +21,15 @@ export function lab() {
       <section class="sim-panel sim-console" aria-label="Device console">
         <div class="sim-bar"><h2 id="sim-console-title">Device console</h2><button class="sim-button" type="button" id="sim-clear">Clear</button></div>
         <pre id="sim-output" role="log" tabindex="0" aria-label="Command output"></pre>
-        <form id="sim-console"><label id="sim-prompt" for="sim-command">›</label><input id="sim-command" aria-label="CLI command" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="512" placeholder="Type ? for help"><button class="sim-button sim-accent" type="submit">Run ⏎</button></form>
+        <form id="sim-console"><label id="sim-prompt" for="sim-command">›</label><input id="sim-command" aria-label="CLI command" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="512" placeholder="Type sh ip int br or ? for help"><button class="sim-button sim-accent" type="submit">Run ⏎</button></form>
+        <p class="sim-keyboard"><kbd>?</kbd> Show matching commands <kbd>Tab</kbd> Complete a keyword <kbd>↑</kbd> Recall</p>
       </section>
     </div>
     <aside class="sim-side">
       <section class="sim-panel" aria-label="Selected device">
         <div class="sim-bar"><h2 id="sim-inspector-title">Device</h2><button type="button" id="sim-remove" class="sim-button">Remove</button></div>
         <dl id="sim-inspector" class="sim-inspector"></dl>
-        <details class="sim-reference"><summary>Commands for this device</summary><div id="sim-commands"></div></details>
+        <details class="sim-reference"><summary>Commands for this device</summary><div class="sim-ref-controls"><label>Find a command<input id="sim-command-search" type="search" placeholder="e.g. ospf, trunk, ssid"></label><label>Coverage<select id="sim-command-scope"><option value="live">Live LabSim</option><option value="guided">CCNA study reference</option></select></label></div><div id="sim-commands"></div></details>
       </section>
       <section class="sim-panel" aria-label="Cable connections">
         <div class="sim-bar"><h2>Cables</h2></div>
@@ -43,7 +44,7 @@ export function lab() {
         <li>Select <b>PC1</b> and run <code>ping 192.168.20.21</code> to reach the IP phone across the staff and voice VLANs.</li>
         <li>On <b>SW1</b>, enter <code>enable</code>, <code>configure terminal</code>, <code>interface gi0/3</code>, then <code>shutdown</code>. Repeat the PC ping and compare the result. Use <code>no shutdown</code> to restore the port.</li>
         <li>Add a PC, select it, and run <code>wifi join Netra-Staff NetraLab26</code>, then <code>ipconfig /renew</code> and <code>ping 192.168.10.1</code>.</li>
-      </ol><p>The starter network includes dummy credentials. LabSim uses scenario-scale protocols and abbreviated IOS-style output.</p></details>
+      </ol><p>The starter network includes dummy credentials. LabSim uses a Cisco-style CLI for routers and switches and a dedicated AP CLI for the simulated radio. The command list shows which syntax runs in this workspace.</p></details>
     </aside>
   </div>
   <dialog id="sim-confirm"><form method="dialog"><h2 id="sim-confirm-title">Replace this workspace?</h2><p id="sim-confirm-copy"></p><div><button class="sim-button" value="cancel" autofocus>Cancel</button><button class="sim-button sim-accent" value="confirm">Continue</button></div></form></dialog>

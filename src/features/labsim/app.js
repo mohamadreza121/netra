@@ -1,5 +1,6 @@
 import { addDevice, addLink, branchLab, deviceById, deviceLimit, emptyLab, endpoint, gateway, hostIp, hostPrefix, isHost, linkUp, models, peer, removeDevice, restoreLab, voiceVlan, wifiUp } from './network.js';
-import { execute, prompt, syntax, terminalSession } from './cli.js';
+import { commandHelp, commandSets, execute, prompt, syntax, terminalSession } from './cli.js';
+import { guidedEntries, guidedTopics } from './reference.js';
 
 const $=id=>document.getElementById(id);
 const board=$('sim-board');
@@ -191,7 +192,7 @@ function renderInspector() {
       if(ap)items.push(['Wi-Fi',ap.radio.ssid+' · '+ap.name]);
       if(d.type==='phone')items.push(['Extension',d.host.extension??'Unassigned'],['Voice VLAN',voiceVlan(lab,d)??'—']);
     }
-    if(d.type==='ap')items.push(['Radio',d.radio.enabled?'On · '+d.radio.ssid:'Off']);
+    if(d.type==='ap')items.push(['Radio',d.radio.enabled?'On · '+d.radio.ssid:'Off'],['IPv4',hostIp(d)?hostIp(d)+'/'+hostPrefix(d):'Unassigned']);
     for(const [name,p] of Object.entries(d.ports)){
       const far=peer(lab,d,name);
       const attributes=d.type==='switch'?(p.mode==='trunk'?'trunk · native '+p.native:'VLAN '+p.vlan+(p.voice?' · voice '+p.voice:'')):
@@ -202,16 +203,71 @@ function renderInspector() {
   $('sim-inspector').replaceChildren(...items.flatMap(([title,value])=>[element('dt',title),element('dd',value)]));
 }
 
+const modeLabels={user:'User EXEC',exec:'Privileged EXEC',global:'Global configuration',interface:'Interface',range:'Interface range',vlan:'VLAN configuration',pool:'DHCP pool',ospf:'OSPF process',acl:'Access list',endpoint:'Device console'};
+function renderReference() {
+  const d=active();
+  const target=$('sim-commands');
+  target.replaceChildren();
+  if(!d){target.append(element('p','Select a device.'));return;}
+  const query=$('sim-command-search').value.trim().toLowerCase();
+  const matches=text=>text.toLowerCase().includes(query);
+  function group(title,entries){
+    if (!entries.length)return;
+    const details=element('details');
+    details.open=Boolean(query)||title===modeLabels[sessions.get(d.id).mode]||title==='Quick examples';
+    details.append(element('summary',title));
+    for(const entry of entries)details.append(entry);
+    target.append(details);
+  }
+  if($('sim-command-scope').value==='live'){
+    const sections=[...(d.type==='router'||d.type==='switch'?syntax.ios:[]),...syntax[d.type]];
+    group('Quick examples',sections.filter(([title,cmd])=>matches(title+' '+cmd)).map(([title,cmd,note])=>{
+      const row=element('div',undefined,'sim-ref-entry');
+      row.append(element('h3',title),element('code',cmd),element('p',note));
+      return row;
+    }));
+    for(const [mode,patterns] of Object.entries(commandSets[d.type])){
+      group(modeLabels[mode],[...new Set(patterns)].filter(pattern=>matches(pattern)||matches(modeLabels[mode])).map(pattern=>element('code',pattern,'sim-ref-command')));
+    }
+  } else {
+    const intro=element('p','Use this syntax in CCNA Practice when a guided lab is available.');
+    const link=element('a','Open CCNA Practice command reference');link.href='/ccna/#reference';
+    target.append(intro,link);
+    group('Topics by volume',guidedTopics.filter(topic=>topic.types.includes(d.type)&&matches(topic.title+' '+topic.terms)).map(topic=>{
+      const row=element('div',undefined,'sim-ref-entry');
+      row.append(element('h3',topic.title),element('p',topic.source),element('code',topic.terms));
+      return row;
+    }));
+    group('Guided CLI examples',guidedEntries(d.type).filter(entry=>matches(entry.command+' '+entry.lab.title)).map(entry=>{
+      const row=element('div',undefined,'sim-ref-entry');
+      row.append(element('code',entry.command),element('p',entry.lab.title));
+      return row;
+    }));
+  }
+  if(!target.querySelector('details'))target.append(element('p','No matching commands.'));
+}
+
+$('sim-command-search').addEventListener('input',renderReference);
+$('sim-command-scope').addEventListener('change',renderReference);
+function logConsole(d,line,result) {
+  const log=histories.get(d.id)??[];
+  log.push(line,...(result?[result]:[]));
+  histories.set(d.id,log.slice(-180));
+}
+function showHelp(d) {
+  const session=sessions.get(d.id);
+  const result=commandHelp(d,session,input.value);
+  logConsole(d,prompt(d,session)+' '+input.value+'?',result.text);
+  setConsole(true);
+}
+
 function select(id) {
   selected=id;
   const d=active();
   if(d&&!sessions.has(id))sessions.set(id,terminalSession(d));
   for(const item of $('sim-nodes').children)item.setAttribute('aria-pressed',String(item.dataset.id===id));
   renderInspector();
-  const sections=d?[...(['switch','router'].includes(d.type)?syntax.ios:[]),...syntax[d.type]]:[];
-  $('sim-commands').replaceChildren(...sections.map(([topic,commands,note])=>{
-    const item=element('div');item.append(element('h3',topic),element('code',commands),element('p',note));return item;
-  }));
+  renderReference();
   input.value='';
   commandIndex=undefined;
   setConsole(true);
@@ -249,6 +305,17 @@ for(const [type,model] of Object.entries(models)){
   $('sim-add').append(control);
 }
 input.addEventListener('keydown',event=>{
+  const d=active();
+  if(!d)return;
+  if(event.key==='?'&&input.selectionStart===input.value.length&&input.value.split('"').length%2===1&&input.value.split("'").length%2===1){
+    event.preventDefault();showHelp(d);return;
+  }
+  if(event.key==='Tab'&&!event.shiftKey&&input.selectionStart===input.value.length){
+    const help=commandHelp(d,sessions.get(d.id),input.value);
+    if(help.completed){
+      event.preventDefault();input.value=help.completed;return;
+    }
+  }
   if(!['ArrowUp','ArrowDown'].includes(event.key))return;
   const commands=recentCommands.get(selected);
   if(!commands?.length)return;
@@ -259,17 +326,15 @@ input.addEventListener('keydown',event=>{
 $('sim-console').addEventListener('submit',event=>{
   event.preventDefault();
   const d=active();
-  const command=input.value.trim();
-  if(!d||!command)return;
+  const command=input.value;
+  if(!d||!command.trim())return;
   const s=sessions.get(d.id);
   const before=prompt(d,s);
   const commands=recentCommands.get(d.id)??[];
   if(commands.at(-1)!==command)recentCommands.set(d.id,[...commands.slice(-39),command]);
   commandIndex=undefined;
   const result=execute(lab,d,s,command);
-  const log=histories.get(d.id)??[];
-  log.push(before+' '+command,...(result.text?[result.text]:[]));
-  histories.set(d.id,log.slice(-180));
+  logConsole(d,before+' '+command,result.text);
   traffic=result.path??[];
   save();
   renderInspector();

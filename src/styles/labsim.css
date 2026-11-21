@@ -149,3 +149,14 @@ html:has(.sim-workspace) { scroll-behavior: auto; }
   .sim-workspace { padding-bottom: 42px; }
   #sim-console { gap: 5px; }
 }
+.sim-keyboard { padding: 0 12px 10px; color: var(--sim-muted); font-size: .72rem; }
+.sim-keyboard kbd { margin-inline: 10px 3px; color: var(--sim-accent); }
+.sim-keyboard kbd:first-child { margin-left: 0; }
+.sim-ref-controls { display: grid; gap: 8px; padding: 0 13px 10px; }
+.sim-ref-controls label { display: grid; gap: 4px; color: var(--sim-muted); font-size: .75rem; }
+#sim-commands { padding-bottom: 10px; }
+#sim-commands > details { border-top: 1px solid var(--sim-line); }
+#sim-commands > details > summary { padding: 8px 0; }
+#sim-commands a { color: var(--sim-accent); font-size: .78rem; text-decoration: underline; }
+.sim-ref-entry { margin-block: 8px 12px; }
+.sim-ref-command { display: block; padding-block: 3px; }
