@@ -4,6 +4,6 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "check": "node --check src/motion.js && node --check src/features/labsim/demo.js && node --check src/features/ccna/app.mjs && node --test tests/ccna.test.mjs && node scripts/build.mjs"
+    "check": "node --check src/motion.js && node --check src/features/labsim/app.js && node --check src/features/ccna/app.mjs && node --test tests/*.test.mjs && node scripts/build.mjs"
   }
 }

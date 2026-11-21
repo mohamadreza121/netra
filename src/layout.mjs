@@ -21,6 +21,7 @@ export function layout({route, title, content, intro}) {
 <link rel="stylesheet" href="/styles/main.css">
 ${intro ? '<link rel="stylesheet" href="/styles/rack.css"><script type="module" src="/motion.js"></script>' : ''}
 ${route === 'ccna' ? '<link rel="stylesheet" href="/styles/ccna.css"><script type="module" src="/features/ccna/app.mjs"></script>' : ''}
+${route === 'labsim' ? '<link rel="stylesheet" href="/styles/labsim.css"><script type="module" src="/features/labsim/app.js"></script>' : ''}
 </head>
 <body class="route-${route || 'home'}">
 <a class="skip" href="#main">${intro ? 'Skip animation' : 'Skip to content'}</a>

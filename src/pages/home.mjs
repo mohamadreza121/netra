@@ -91,7 +91,7 @@ ${ccnpExamples.map(ccnpConsole).join('')}
 </div>
 </div></section>
 <section class="lab-section" id="labsim"><div class="frame section-grid">
-<div class="section-copy"><p class="eyebrow">LABSIM</p><h2>Bring it<br>online<span>.</span></h2><p>Open the workspace preview to select devices, inspect ports, and try a small set of console commands.</p><a class="button primary" href="/labsim/">Open LabSim</a></div>
+<div class="section-copy"><p class="eyebrow">LABSIM</p><h2>Bring it<br>online<span>.</span></h2><p>Cable routers, switches, and endpoints. Configure them in the console and follow the traffic through your topology.</p><a class="button primary" href="/labsim/">Open LabSim</a></div>
 <div class="lab-mini" aria-hidden="true">
 <div class="terminal-bar"><span class="terminal-dot"></span> TOPOLOGY <span>Branch LAN</span></div>
 <div class="mini-map"><div><b>◈</b>R1</div><span></span><div><b>▤</b>SW1</div><span></span><div><b>▣</b>PC1</div></div>
