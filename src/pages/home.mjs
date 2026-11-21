@@ -84,7 +84,7 @@ VLAN Name          Status    Ports
 <p class="eyebrow">CCNP PRACTICE</p>
 <h2 id="ccnp-title">Think in<br>networks<span>.</span></h2>
 <p>Verify OSPF adjacencies, compare BGP paths, and see how policy and redistribution shape the routing table.</p>
-<a class="button violet-button" href="/ccnp/">Explore CCNP topics</a>
+<a class="button violet-button" href="/ccnp/">Explore CCNP Practice</a>
 </div>
 <div class="console-stack" aria-label="Sample router output">
 ${ccnpExamples.map(ccnpConsole).join('')}

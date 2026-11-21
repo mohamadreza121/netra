@@ -6,7 +6,7 @@ export function lab() {
 <section class="sim-workspace frame" aria-label="Network simulator">
   <div class="sim-tools">
     <div id="sim-add" class="sim-add" aria-label="Add devices"></div>
-    <div class="sim-actions"><button type="button" id="sim-export" class="sim-button">Export JSON</button><button type="button" id="sim-starter" class="sim-button">Load Branch LAN</button><button type="button" id="sim-empty" class="sim-button">New empty lab</button></div>
+    <div class="sim-actions"><a class="sim-button" href="/labsim/ccnp/">CCNP guided labs</a><button type="button" id="sim-export" class="sim-button">Export JSON</button><button type="button" id="sim-starter" class="sim-button">Load Branch LAN</button><button type="button" id="sim-empty" class="sim-button">New empty lab</button></div>
   </div>
   <p id="sim-status" role="status" class="sim-status"></p>
   <div class="sim-grid">

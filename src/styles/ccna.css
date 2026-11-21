@@ -146,3 +146,8 @@ html:has(.route-ccna) { scroll-behavior:auto; }
   .ccna-lab-heading { flex-direction:column; }
   .ccna-views a { padding-inline:8px; }
 }
+
+.practice-lab-actions, .practice-card-actions { display:flex; flex-wrap:wrap; gap:6px; align-items:start; }
+.practice-lab-actions { flex-shrink:0; }
+.practice-lab-actions a, .practice-card-actions a { display:inline-flex; align-items:center; }
+@media (max-width:680px) { .ccna-lab-heading:has(#lab-open:not([hidden])) { flex-direction:column; } }

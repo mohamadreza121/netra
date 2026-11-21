@@ -1,0 +1,89 @@
+html:has(.route-ccnp) { scroll-behavior:auto; }
+.route-ccnp {
+  --lab-bg: #120d1a;
+  --lab-surface: #20172c;
+  --lab-border: #49385f;
+  --lab-quiet: #cabed7;
+  --lab-light: #f6eefb;
+  --lab-accent: #d8baff;
+  background: var(--lab-bg);
+}
+.ccnp-intro {
+  color:#f7efff;
+  border-color:#55406d;
+  background: radial-gradient(ellipse at 78% 100%, #4e2f6a, transparent 62%), linear-gradient(112deg,#1c112b,#2a1b40);
+}
+.ccnp-intro h1 span, .ccnp-intro .eyebrow { color:#dcbfff; }
+.ccnp-intro p:not(.eyebrow), .ccnp-intro .ccna-summary { color:#decee9; }
+.ccnp-intro .ccna-summary b { color:#f4dcff; }
+.ccnp-intro .ccna-summary a { min-height:34px; display:inline-flex; align-items:center; color:#f4dcff; text-decoration:underline; text-underline-offset:4px; }
+.ccnp-track { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:18px; }
+.ccnp-track button {
+  display:inline-flex;
+  align-items:baseline;
+  gap:8px;
+  min-height:43px;
+  padding:10px 14px;
+  background:#21162c;
+  border:1px solid #654e7d;
+  border-radius:4px;
+  color:#e8daf3;
+  cursor:pointer;
+}
+.ccnp-track button[aria-pressed="true"] { background:#e2caff; color:#271839; border-color:#e2caff; }
+.ccnp-track button:hover:not([aria-pressed="true"]) { background:#37264a; }
+.ccnp-track span { font:.78rem var(--mono); }
+#ccnp-track-count { color:var(--lab-quiet); margin-inline-start:6px; }
+.route-ccnp .ccna-views, .route-ccnp .ccna-guide, .route-ccnp .ccna-terminal-bar { background:#20162d; }
+.route-ccnp .ccna-views a { color:#e0d1eb; }
+.route-ccnp .ccna-views a[aria-current="page"],
+.route-ccnp .ccna-filter[aria-pressed="true"],
+.route-ccnp .ccna-device[aria-pressed="true"],
+.route-ccnp .ccna-choices button[aria-pressed="true"] { background:#dec9f8; color:#2a1938; border-color:#dec9f8; }
+.route-ccnp .ccna-search input, .route-ccnp #lab-input { background:#181223; border-color:#695483; }
+.route-ccnp .ccna-search input::placeholder { color:#c3a9d4; }
+.route-ccnp .ccna-filter, .route-ccnp .ccna-control, .route-ccnp .ccna-device { background:#2b1f3a; border-color:#644d7c; color:#eee0f7; }
+.route-ccnp .ccna-filter:hover, .route-ccnp .ccna-control:hover, .route-ccnp .ccna-device:hover { background:#3b2a50; }
+.route-ccnp .ccna-lab-link { background:#1a1224; }
+.route-ccnp .ccna-lab-link:hover, .route-ccnp .ccna-lab-link[aria-pressed="true"] { background:#302040; border-color:#775394; }
+.route-ccnp .ccna-lab-link[aria-pressed="true"] { border-left-color:#d8b2ff; }
+.route-ccnp #ccna-lab-list { max-height:clamp(360px, 70vh, 700px); overflow:auto; overscroll-behavior:contain; }
+.route-ccnp .ccna-lab-heading .eyebrow, .route-ccnp .ccna-topology li, .route-ccnp #lab-steps b, .route-ccnp .ccna-guide summary, .route-ccnp .ccna-sources summary { color:#d9c1ee; }
+.route-ccnp .ccna-topology li + li::before { background:#9d78c2; }
+.route-ccnp .ccna-terminal { background:#110b1b; border-color:#5f4876; }
+.route-ccnp #lab-output { color:#eadcf5; }
+.route-ccnp #lab-prompt { overflow-wrap:anywhere; max-width:40%; }
+.route-ccnp #lab-form button { color:#291638; border-color:#e5ccff; }
+.route-ccnp #lab-steps [aria-current] { background:#3d2b50; }
+.route-ccnp .ccna-card .ccna-card-tag, .route-ccnp #reference-count, .route-ccnp #concept-count { color:#d5b8f1; }
+.ccnp-coverage-group {
+  margin-bottom:14px;
+  border:1px solid var(--lab-border);
+  border-radius:6px;
+  background:var(--lab-surface);
+}
+.ccnp-coverage-title { display:flex; flex-wrap:wrap; gap:6px 12px; align-items:baseline; justify-content:space-between; padding:14px; }
+.ccnp-coverage-title h3 { font-size:1.12rem; }
+.ccnp-coverage-title span, .ccnp-objective { font:.8rem var(--mono); color:var(--lab-accent); }
+.ccnp-coverage-list { margin:0; padding:0; list-style:none; }
+.ccnp-coverage-list li {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:8px 14px;
+  padding:9px 14px;
+  border-top:1px solid var(--lab-border);
+}
+.ccnp-coverage-list li > div:first-child { display:flex; gap:9px; align-items:baseline; }
+.ccnp-coverage-list b { font-size:.92rem; }
+#ccnp-book { margin-top:10px; }
+.ccnp-book-row { padding:10px 0; border-top:1px solid var(--lab-border); }
+.ccnp-book-row h3 { margin:0 0 6px; color:var(--lab-light); font-size:.93rem; }
+@media (max-width:800px) {
+  .route-ccnp #ccna-lab-list { max-height:238px; }
+}
+@media (max-width:500px) {
+  #ccnp-track-count { flex-basis:100%; margin:2px 0 0; }
+  .ccnp-intro h1 { font-size:clamp(2.35rem, 10vw, 3rem); }
+}

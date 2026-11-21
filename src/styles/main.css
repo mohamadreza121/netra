@@ -217,18 +217,6 @@ code, pre { font-family: var(--mono); }
 .lab-hero { background: radial-gradient(ellipse at top right,#254c43,#152422 65%); }
 .interior-hero h1 { font-size: clamp(3.65rem, 9vw, 8.75rem); letter-spacing: -.095em; line-height: .9; margin: 16px 0 22px; overflow-wrap: break-word; }
 .interior-hero p:last-child { max-width: 64ch; line-height: 1.55; font-size: 1.125rem; }
-.outline { padding-block: 44px 80px; }
-.outline-heading h2 { font-size: 2rem; letter-spacing: -.045em; margin-bottom: 8px; }
-.outline-heading p { color: var(--muted); }
-.outline-grid { margin-top: 25px; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; }
-.outline-topic { display: flex; flex-direction: column; padding: 22px; border: 1px solid #556959; background: #21352b; border-radius: 10px; }
-.outline-topic h2 { margin: 0 0 8px; font-size: 1.45rem; letter-spacing: -.04em; }
-.outline-topic p { line-height: 1.5; margin-bottom: 16px; }
-.outline-topic code { font-size: .8125rem; margin-top: auto; overflow-wrap: anywhere; }
-.outline-topic code { color: var(--acid); }
-.route-ccnp .outline { background: #0c0811; }
-.route-ccnp .outline-topic { background: #160f20; border-color: #60477a; }
-.route-ccnp .outline-topic code { color: var(--violet); }
 .workspace { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px; padding-block: 35px 72px; }
 .live-terminal { align-self: start; }
 .mini-map > div { border-radius: 8px; }
@@ -249,7 +237,6 @@ code, pre { font-family: var(--mono); }
   .nav-wrap { width: calc(100% - 48px); }
   .header-cta { display: none; }
   .section-grid, .ccnp-grid, .workspace { grid-template-columns: 1fr; }
-  .outline-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .ccna-terminal, .lab-mini { max-width: 600px; }
   .footer-grid { flex-wrap: wrap; }
 }
@@ -259,7 +246,6 @@ code, pre { font-family: var(--mono); }
   .site-header nav, .site-footer nav { gap: 14px; flex-wrap: wrap; }
   .site-header nav a { font-size: .875rem; }
   .ccna-terminal { box-shadow: 7px 8px 0 #a5baa8; }
-  .outline-grid { grid-template-columns: 1fr; }
   .footer-base { flex-direction: column; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -284,7 +270,7 @@ code, pre { font-family: var(--mono); }
 }
 :root { --display: "Space Grotesk", Arial, Helvetica, sans-serif; }
 .brand { font-family: Orbitron, Arial, Helvetica, sans-serif; letter-spacing: -.055em; }
-.section-copy h2, .interior-hero h1, .outline-heading h2 {
+.section-copy h2, .interior-hero h1 {
   font-family: var(--display);
   letter-spacing: -.075em;
 }
