@@ -1,3 +1,4 @@
+const header = document.querySelector('.site-header');
 const hero = document.querySelector('.hero');
 const stage = hero.querySelector('.rack-stage');
 const title = hero.querySelector('.rack-title');
@@ -19,8 +20,14 @@ const smooth = value => value * value * (3 - 2 * value);
 
 function draw() {
   frame = undefined;
-  const travel = hero.offsetHeight - stage.offsetHeight;
-  const progress = travel > 0 ? clamp(-hero.getBoundingClientRect().top / travel) : 0;
+  const bounds = hero.getBoundingClientRect();
+  const stageHeight = stage.offsetHeight;
+  const reduced = motion.matches;
+  header.toggleAttribute('data-docked-top', bounds.bottom <= (reduced ? header.offsetHeight : stageHeight));
+  if (reduced) return;
+
+  const travel = hero.offsetHeight - stageHeight;
+  const progress = travel > 0 ? clamp(-bounds.top / travel) : 0;
   const split = smooth(progressBetween(progress, .02, .19));
   const reveal = smooth(progressBetween(progress, .02, .26));
 
@@ -50,20 +57,22 @@ function schedule() {
 
 function configure() {
   hero.toggleAttribute('data-animated', !motion.matches);
-  if (!motion.matches) {
-    window.addEventListener('scroll', schedule, { passive: true });
-    window.addEventListener('resize', schedule);
-    draw();
-  } else {
-    window.removeEventListener('scroll', schedule);
-    window.removeEventListener('resize', schedule);
-    cancelAnimationFrame(frame);
-    frame = undefined;
+  if (motion.matches) {
     stage.removeAttribute('style');
     title.removeAttribute('style');
     [...letters, ...modules, ...words].forEach(element => element.removeAttribute('style'));
   }
+  schedule();
 }
 
+function measureHeader() {
+  document.body.style.setProperty('--home-nav-height', `${header.offsetHeight}px`);
+  schedule();
+}
+
+new ResizeObserver(measureHeader).observe(header);
+window.addEventListener('scroll', schedule, { passive: true });
+window.addEventListener('resize', schedule);
+measureHeader();
 configure();
 motion.addEventListener('change', configure);

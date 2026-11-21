@@ -53,7 +53,6 @@ export function rackHero() {
     <span data-rack-word>Simulate</span>
     <span data-rack-word>Master</span>
   </div>
-  <a class="skip" href="#main">Skip animation</a>
 </div>
 </section>`;
 }

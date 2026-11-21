@@ -22,12 +22,13 @@ export function layout({route, title, content, intro}) {
 ${intro ? '<link rel="stylesheet" href="/styles/rack.css"><script type="module" src="/motion.js"></script>' : ''}
 </head>
 <body class="route-${route || 'home'}">
-${intro || '<a class="skip" href="#main">Skip to content</a>'}
+<a class="skip" href="#main">${intro ? 'Skip animation' : 'Skip to content'}</a>
 <header class="site-header"><div class="nav-wrap">
 <a class="brand" href="/" aria-label="Netra home">${logo}</a>
 <nav aria-label="Main navigation">${links(route)}</nav>
 <a class="header-cta" href="${route === 'labsim' ? '/' : '/labsim/'}">${route === 'labsim' ? 'Back to home' : '<span aria-hidden="true">›_</span> Open LabSim'}</a>
 </div></header>
+${intro || ''}
 <main id="main" tabindex="-1">${content}</main>
 <footer class="site-footer"><div class="frame footer-grid">
 <div><a class="brand" href="/" aria-label="Netra home">${logo}</a><p>Learn. Simulate. Master.</p></div>
