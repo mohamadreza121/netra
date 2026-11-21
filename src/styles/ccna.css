@@ -1,0 +1,122 @@
+.route-ccna {
+  --lab-bg: #101c18;
+  --lab-surface: #182923;
+  --lab-border: #385449;
+  --lab-quiet: #b5cabc;
+  --lab-light: #edf4e9;
+  --lab-accent: #cfee83;
+  background: var(--lab-bg);
+}
+.ccna-intro {
+  position: relative;
+  padding-block: clamp(42px, 6vw, 84px);
+  color: #193428;
+  border-bottom: 1px solid #8da891;
+  background:
+    radial-gradient(ellipse at 80% 110%, #a0bba0, transparent 55%),
+    linear-gradient(115deg, #e1ecd9, #ccdfc9);
+}
+.ccna-intro .eyebrow { color: #365e44; }
+.ccna-intro h1 {
+  font: 700 clamp(3rem, 6.2vw, 6.5rem)/.98 var(--display);
+  letter-spacing: -.075em;
+  margin: 12px 0 15px;
+}
+.ccna-intro h1 span { color: #417651; }
+.ccna-intro p:not(.eyebrow) { max-width: 57ch; font-size: 1.105rem; line-height: 1.55; }
+.ccna-summary { display:flex; flex-wrap:wrap; gap: 9px 22px; margin-top: 20px; color:#314e3e; font: .8125rem var(--mono); }
+.ccna-summary b { font-size: 1rem; color:#1b3b2a; }
+.ccna-workspace { padding-block: 25px 72px; color: var(--lab-light); }
+.ccna-workspace [hidden] { display:none !important; }
+.ccna-toolbar { display:flex; justify-content:space-between; gap: 15px 24px; align-items:end; flex-wrap:wrap; }
+.ccna-views { display:flex; flex-wrap:wrap; gap:5px; padding:4px; border:1px solid var(--lab-border); background:#14231d; border-radius:5px; }
+.ccna-views a { display:flex; align-items:center; min-height:42px; padding:9px 13px; font-weight:700; color:#bfd0c3; font-size:.875rem; border-radius:3px; }
+.ccna-views a:hover { color:var(--lab-accent); }
+.ccna-views a[aria-current="page"] { background:#d6e7cf; color:#193526; }
+.ccna-search { width:min(390px,100%); color:var(--lab-quiet); font-size:.8125rem; font-weight:700; }
+.ccna-search span { display:block; margin-bottom:6px; }
+.ccna-search input, .wlan-grid input:not([type="checkbox"]), .wlan-grid select {
+  width:100%; padding:11px; border:1px solid #577469; border-radius:4px; background:#0e1b16; color:var(--lab-light);
+}
+.ccna-search input::placeholder { color:#9db6a7; }
+.ccna-search:has(input:disabled) { visibility:hidden; }
+.ccna-domains { display:flex; flex-wrap:wrap; gap:6px; padding-block:18px 23px; }
+.ccna-filter, .ccna-control, .ccna-device {
+  color:#e0eee0; background:#1b2f26; border:1px solid #527265; border-radius:3px; cursor:pointer; min-height:36px; padding:7px 10px; font-size:.8125rem;
+}
+.ccna-filter:hover, .ccna-control:hover, .ccna-device:hover { background:#2c4739; }
+.ccna-filter[aria-pressed="true"], .ccna-device[aria-pressed="true"], .ccna-choices button[aria-pressed="true"] { color:#1b3626; background:#cfe6c8; border-color:#cfe6c8; }
+.ccna-control:disabled { opacity:.65; cursor:default; }
+.ccna-labs { display:grid; grid-template-columns:minmax(210px, .31fr) minmax(0,1fr); gap:18px; align-items:start; }
+.ccna-lab-list, .ccna-active-lab { border:1px solid var(--lab-border); border-radius:7px; background:var(--lab-surface); min-width:0; }
+.ccna-lab-list { padding:12px; }
+.ccna-lab-list h2 { font:700 1.17rem var(--display); margin:2px 4px 12px; }
+#ccna-lab-list { display:grid; gap:5px; }
+#ccna-lab-list p { padding:6px; color:var(--lab-quiet); }
+.ccna-lab-link { display:block; text-align:left; width:100%; padding:10px; min-height:52px; border:1px solid transparent; border-left-width:3px; border-radius:3px; background:#12231b; color:var(--lab-light); font-weight:700; line-height:1.3; font-size:.875rem; cursor:pointer; }
+.ccna-lab-link:hover, .ccna-lab-link[aria-pressed="true"] { border-color:#507458; background:#24392d; }
+.ccna-lab-link[aria-pressed="true"] { border-left-color:var(--lab-accent); }
+.ccna-lab-link small { display:block; color:var(--lab-quiet); font-size:.72rem; font-weight:400; margin-top:4px; }
+.ccna-active-lab { padding:clamp(14px, 2.2vw, 26px); }
+.ccna-lab-heading { display:flex; align-items:start; justify-content:space-between; gap:12px; }
+.ccna-lab-heading .eyebrow { color:#a7c9b4; font-size:.74rem; letter-spacing:.055em; }
+.ccna-lab-heading h2, .ccna-panel-heading h2 { font:700 clamp(1.55rem, 3vw, 2.55rem)/1.05 var(--display); letter-spacing:-.045em; margin:6px 0 9px; }
+.ccna-lab-heading p:not(.eyebrow), .ccna-panel-heading p { color:var(--lab-quiet); line-height:1.55; }
+#lab-reset { flex-shrink:0; }
+.ccna-topology { list-style:none; padding:0; margin:17px 0 15px; display:flex; flex-wrap:wrap; align-items:center; gap:5px 9px; }
+.ccna-topology li { color:#bde6c5; font:.75rem var(--mono); display:flex; gap:9px; align-items:center; }
+.ccna-topology li + li::before { content:""; width:14px; height:1px; background:#74ab8b; }
+.ccna-terminal { border:1px solid #496c5d; border-radius:6px; overflow:hidden; background:#0a150f; }
+.ccna-terminal-bar { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; padding:8px; border-bottom:1px solid var(--lab-border); background:#14261d; }
+.ccna-terminal-bar > span { color:var(--lab-quiet); font:.75rem var(--mono); padding-inline:6px; }
+#lab-devices { display:flex; gap:5px; flex-wrap:wrap; }
+.ccna-device { font:700 .8125rem var(--mono); min-height:32px; }
+#lab-output, #wlan-output { color:#deeee1; font: .875rem/1.6 var(--mono); white-space:pre-wrap; overflow-wrap:anywhere; }
+#lab-output { height:clamp(195px, 30vh, 325px); margin:0; padding:15px; overflow:auto; }
+#lab-form { display:flex; align-items:center; gap:7px; padding:9px; border-top:1px solid var(--lab-border); font:.8125rem var(--mono); }
+#lab-prompt { flex-shrink:0; color:var(--lab-accent); font-weight:700; }
+#lab-input { min-width:0; flex:1; padding:9px 7px; color:var(--lab-light); border:1px solid #4f7260; border-radius:3px; background:#14241c; }
+#lab-form button { border:1px solid #c6e793; background:var(--lab-accent); color:#193320; font-weight:700; border-radius:3px; padding:7px 9px; min-height:36px; cursor:pointer; }
+.ccna-guide { margin-top:14px; padding:13px; border:1px solid var(--lab-border); border-radius:5px; background:#15271e; }
+.ccna-guide-top { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; align-items:center; }
+#lab-progress { font:700 .8125rem var(--mono); color:var(--lab-accent); }
+#lab-explanation { margin:8px 0; color:var(--lab-quiet); line-height:1.45; }
+#lab-next { color:var(--lab-light); overflow-wrap:anywhere; }
+.ccna-guide details { margin-top:12px; border-top:1px solid var(--lab-border); padding-top:10px; }
+.ccna-guide summary, .ccna-sources summary { color:#c1e6c7; cursor:pointer; }
+#lab-steps { padding-left:24px; }
+#lab-steps li { padding:5px; color:var(--lab-quiet); line-height:1.4; font-size:.8125rem; overflow-wrap:anywhere; }
+#lab-steps b { color:#bce2c9; margin-right:.65em; }
+#lab-steps [aria-current] { background:#294735; color:var(--lab-light); }
+#lab-steps .done::marker { color:var(--lab-accent); }
+.ccna-panel-heading { margin:0 0 14px; }
+[data-panel="wlan"] { margin-top:22px; }
+.ccna-cards, .wlan-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.ccna-card { display:grid; align-content:start; justify-items:start; gap:9px; padding:18px; border:1px solid var(--lab-border); border-radius:5px; background:var(--lab-surface); }
+.ccna-card h3 { color:var(--lab-light); overflow-wrap:anywhere; font-size:1.05rem; }
+.ccna-card p { color:var(--lab-quiet); line-height:1.5; }
+.ccna-card .ccna-card-tag, #reference-count { color:#abd2b7; font:.75rem var(--mono); }
+#reference-count { margin:0 0 10px; }
+.ccna-choices { display:flex; flex-wrap:wrap; gap:5px; }
+.ccna-feedback:empty { display:none; }
+.ccna-feedback[data-result="correct"] { color:var(--lab-accent); }
+.ccna-card details { width:100%; min-width:0; color:var(--lab-quiet); }
+.ccna-card pre { max-width:100%; white-space:pre-wrap; overflow-wrap:anywhere; }
+.wlan-grid form { gap:12px; justify-items:stretch; }
+.wlan-grid form button { justify-self:start; }
+.wlan-grid label { display:grid; gap:5px; color:var(--lab-quiet); font-weight:700; }
+.wlan-grid .wlan-check { display:flex; align-items:center; }
+.wlan-check input { accent-color:var(--lab-accent); }
+#wlan-output { padding:12px; background:#0d1b13; margin:0; width:100%; }
+.ccna-sources { margin-top:23px; color:var(--lab-quiet); font-size:.875rem; line-height:1.5; }
+.ccna-sources p { margin-top:8px; }
+.ccna-sources a { text-decoration:underline; }
+@media (max-width:800px) {
+  .ccna-labs { grid-template-columns:1fr; }
+  #ccna-lab-list { grid-template-columns:repeat(2,minmax(0,1fr)); max-height:240px; overflow:auto; }
+}
+@media (max-width:520px) {
+  .ccna-cards, .wlan-grid { grid-template-columns:1fr; }
+  .ccna-lab-heading { flex-direction:column; }
+  .ccna-views a { padding-inline:8px; }
+}

@@ -20,6 +20,7 @@ export function layout({route, title, content, intro}) {
 <link rel="icon" href="/assets/netra.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/styles/main.css">
 ${intro ? '<link rel="stylesheet" href="/styles/rack.css"><script type="module" src="/motion.js"></script>' : ''}
+${route === 'ccna' ? '<link rel="stylesheet" href="/styles/ccna.css"><script type="module" src="/features/ccna/app.mjs"></script>' : ''}
 </head>
 <body class="route-${route || 'home'}">
 <a class="skip" href="#main">${intro ? 'Skip animation' : 'Skip to content'}</a>
