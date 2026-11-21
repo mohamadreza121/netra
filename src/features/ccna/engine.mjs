@@ -1,5 +1,6 @@
 const navigation = new Set(['enable', 'disable', 'configure terminal', 'exit', 'end']);
 const aliases = new Map([['en', 'enable'], ['conf t', 'configure terminal'], ['sh run', 'show running-config'], ['wr', 'write memory']]);
+const wirelessMode = /^(?:wlan \S+ \d+ \S+$|wireless (?:profile|tag) policy )/;
 const childMode = /^(interface(?: range)?|router ospf|vlan|line|ip access-list (?:standard|extended)|ip dhcp pool|policy-map|class-map|class) /;
 const suffix = mode => {
   if (mode.startsWith('interface')) return 'config-if';
@@ -8,6 +9,9 @@ const suffix = mode => {
   if (mode.startsWith('ip access-list standard')) return 'config-std-nacl';
   if (mode.startsWith('ip access-list')) return 'config-ext-nacl';
   if (mode.startsWith('ip dhcp')) return 'dhcp-config';
+  if (mode.startsWith('wlan ')) return 'config-wlan';
+  if (mode.startsWith('wireless profile policy ')) return 'config-wireless-policy';
+  if (mode.startsWith('wireless tag policy ')) return 'config-policy-tag';
   if (mode.startsWith('vlan ')) return 'config-vlan';
   return 'config';
 };
@@ -24,7 +28,10 @@ function nextMode(mode, command) {
   if (command === 'exit' && mode === 'global') return 'exec';
   if (command === 'exit' && !['user', 'exec', 'host'].includes(mode)) return 'global';
   if (command === 'end' && !['user', 'exec', 'host'].includes(mode)) return 'exec';
-  return navigation.has(command) ? null : childMode.test(command) ? command : mode;
+  if (navigation.has(command)) return null;
+  if (mode === 'global' && wirelessMode.test(command)) return command;
+  if (mode.startsWith('wireless profile policy ') && command.startsWith('vlan ')) return mode;
+  return childMode.test(command) ? command : mode;
 }
 
 export function makeSession(lab) {
@@ -42,7 +49,11 @@ export function makeSession(lab) {
   const startup = {};
   let cursor = 0;
 
-  const accepted = (device, command, mode) => steps.find(s => s.device === device && s.key === command && s.mode === mode);
+  const accepted = (device, command, mode) => {
+    const matches = step => step.device === device && step.key === command && step.mode === mode;
+    const expected = steps[cursor];
+    return expected && matches(expected) ? expected : steps.find(matches);
+  };
   const configured = (mode) => !['host', 'user', 'exec'].includes(mode);
   const showConfig = device => {
     const lines = [];
@@ -122,3 +133,15 @@ export const change = values => state => { Object.assign(state, values); };
 export const read = report => state => report(state);
 export const field = (state, key, fallback = '—') => state[key] ?? fallback;
 export const lines = (...rows) => rows.join('\n');
+
+// Restore the same scenario and prerequisite sequence for a reference card and the CLI.
+export function openAtStep(lab, index = 0) {
+  const session = makeSession(lab);
+  for (const step of session.steps.slice(0,index)) {
+    const result = session.run(step.device,step.command);
+    if (!result.ok || session.cursor !== step.index + 1) {
+      throw new Error(`Could not prepare ${lab.id} at step ${index + 1}.`);
+    }
+  }
+  return session;
+}

@@ -1,6 +1,7 @@
-import { labs, domains } from './catalog.mjs';
+import { labs, domains, commandReference } from './catalog.mjs';
 import { concepts } from './concepts.mjs';
-import { makeSession } from './engine.mjs';
+import { openAtStep } from './engine.mjs';
+import { mountWireless } from './wireless-ui.mjs';
 
 const $ = id => document.getElementById(id);
 const node = (tag, text, className) => {
@@ -23,15 +24,9 @@ const domainButtons = new Map();
 const nav = [...document.querySelectorAll('[data-view]')];
 const panels = [...document.querySelectorAll('[data-panel]')];
 const viewIds = nav.map(link => link.dataset.view);
-const reference = labs.flatMap(lab => {
-  const seen = new Set();
-  return lab.steps.flatMap(([device, command, why], index) => {
-    const key = device + ' ' + command.toLowerCase();
-    if (seen.has(key)) return [];
-    seen.add(key);
-    return [{ lab, index, device, command, why }];
-  });
-});
+const pageSize = 24;
+const visibleCards = { reference:0, concepts:0 };
+const answers = new Map();
 
 let domain = 0;
 let view = 'labs';
@@ -88,12 +83,11 @@ function renderGuide() {
 
 function selectLab(lab, startAt = 0) {
   current = lab;
-  session = makeSession(lab);
+  session = openAtStep(lab,startAt);
   device = lab.devices[0];
   transcript = ['Netra practice console. Press Enter to run the loaded command, or type ? for available commands.'];
   history = [];
   historyPosition = 0;
-  for (const step of session.steps.slice(0, startAt)) session.run(step.device, step.command);
   if (startAt) transcript.push('Prerequisite steps applied. The selected command is ready to run.');
   $('lab-title').textContent = lab.title;
   $('lab-task').textContent = lab.task;
@@ -148,10 +142,33 @@ input.addEventListener('keydown', event => {
 $('lab-queue').addEventListener('click', () => queueNext(true));
 $('lab-reset').addEventListener('click', () => {selectLab(current); input.focus();});
 
-function renderReference() {
-  const entries = reference.filter(({lab, command, why, device}) => (!domain || lab.domain === domain) && matches(lab.title,command,why,device));
-  $('reference-count').textContent = `${entries.length} matching ${entries.length === 1 ? 'example' : 'examples'}`;
-  $('ccna-reference').replaceChildren(...entries.map(({lab,index,device,command,why}) => {
+const modeLabel = mode => ({ user:'User EXEC',exec:'Privileged EXEC',global:'Global configuration',host:'Host shell' })[mode] ?? mode;
+
+function paginate(panel, entries, renderCard, append) {
+  const box = $('ccna-' + panel);
+  const more = $(panel === 'reference' ? 'reference-more' : 'concept-more');
+  const start = append ? visibleCards[panel] : 0;
+  const end = Math.min(entries.length,start + pageSize);
+  const cards = entries.slice(start,end).map(renderCard);
+  if (append) box.append(...cards);
+  else box.replaceChildren(...cards);
+  visibleCards[panel] = end;
+  more.hidden = end === entries.length;
+  return end;
+}
+
+function openCommandLab(lab, index = 0) {
+  selectLab(lab,index);
+  changeView('labs');
+  input.focus();
+}
+
+function renderReference(append = false) {
+  const query = search.value.trim().toLowerCase();
+  const entries = commandReference.filter(({lab, command, explanation, device, mode}) =>
+    (!domain || lab.domain === domain) && matches(lab.title,command,explanation,device,modeLabel(mode)));
+  if (query) entries.sort((a,b) => Number(b.command.toLowerCase().includes(query)) - Number(a.command.toLowerCase().includes(query)));
+  const visible = paginate('reference',entries,({lab,index,device,command,explanation,mode}) => {
     const card = node('article', undefined, 'ccna-card');
     const title = node('h3');
     title.append(node('code',command));
@@ -160,40 +177,49 @@ function renderReference() {
     preview.append(node('summary','Example result'), example);
     preview.addEventListener('toggle', () => {
       if (!preview.open || example.textContent) return;
-      const demo = makeSession(lab);
-      for (const step of demo.steps.slice(0,index)) demo.run(step.device,step.command);
+      const demo = openAtStep(lab,index);
+      const prompt = demo.prompt(device);
       const result = demo.run(device,command);
-      example.textContent = result.output || `Returns to ${demo.prompt(device)} after applying the command.`;
+      example.textContent = prompt + ' ' + command + '\n' + (result.output || demo.prompt(device));
     });
-    card.append(node('p',`${device} · ${lab.title}`,'ccna-card-tag'),title,node('p',why),preview,
-      button('Try command', () => {
-        selectLab(lab,index);
-        changeView('labs');
-        input.focus();
-      }));
+    card.append(node('p',`${device} · ${lab.title} · Step ${index + 1}`,'ccna-card-tag'),title,
+      node('p',modeLabel(mode),'ccna-card-tag'),node('p',explanation),preview,
+      button('Try command', () => openCommandLab(lab,index)));
     return card;
-  }));
+  },append);
+  $('reference-count').textContent = entries.length ? `${visible} of ${entries.length} examples · repeated commands show different lab states` : 'No matching examples.';
 }
 
-function renderConcepts() {
-  const filtered = concepts.filter(([category,id,title,prompt,answer,alts,why]) => (!domain || domain === category) && matches(id,title,prompt,answer,...alts,why));
-  $('ccna-concepts').replaceChildren(...(filtered.length ? filtered.map(([,id,title,prompt,answer,alts,why], index) => {
+function renderConcepts(append = false) {
+  const filtered = concepts.filter(([category,id,title,prompt,answer,alts,why]) => (!domain || domain === category) && matches(id,title,prompt,answer,...alts,why))
+    .sort((a,b)=>a[1].localeCompare(b[1],undefined,{numeric:true}));
+  const visible = paginate('concepts',filtered,([category,id,title,prompt,answer,alts,why], index) => {
     const card = node('article', undefined, 'ccna-card');
     const feedback = node('p',undefined,'ccna-feedback');
     feedback.setAttribute('role','status');
     const choices = [...alts];
     choices.splice(index % 3,0,answer);
     const options = node('div',undefined,'ccna-choices');
-    options.append(...choices.map(choice => button(choice, event => {
-      for (const item of options.children) item.setAttribute('aria-pressed', String(item === event.currentTarget));
+    function showAnswer(choice) {
+      for (const item of options.children) item.setAttribute('aria-pressed',String(item.textContent === choice));
+      if (!choice) return;
       const correct = choice === answer;
       feedback.dataset.result = correct ? 'correct' : 'try-again';
       feedback.textContent = (correct ? 'Correct. ' : 'Answer: ' + answer + '. ') + why;
+    }
+    options.append(...choices.map(choice => button(choice, () => {
+      answers.set(prompt,choice);
+      showAnswer(choice);
     })));
-    card.append(node('p','Objective ' + id,'ccna-card-tag'),node('h3',title),node('p',prompt),options,feedback);
+    showAnswer(answers.get(prompt));
+    card.append(node('p',`Objective ${id} · ${domains[category - 1].title}`,'ccna-card-tag'),node('h3',title),node('p',prompt),options,feedback);
     return card;
-  }) : [node('p','No matching concept checks.')]));
+  },append);
+  $('concept-count').textContent = filtered.length ? `${visible} of ${filtered.length} checks` : 'No matching concept checks.';
 }
+
+$('reference-more').addEventListener('click',()=>renderReference(true));
+$('concept-more').addEventListener('click',()=>renderConcepts(true));
 
 function render() {
   if (view === 'labs') filterList();
@@ -227,27 +253,10 @@ for (const d of [{id:0,title:'All domains'}, ...domains]) {
   $('ccna-domains').append(filter);
 }
 
-let wlan;
-$('wlan-form').addEventListener('submit', event => {
-  event.preventDefault();
-  const profile = Object.fromEntries(new FormData(event.currentTarget));
-  if (profile.security !== 'Open' && profile.key.length < 8) {
-    $('wlan-status').textContent = 'Use at least eight characters for the lab pre-shared key.';
-    return;
-  }
-  delete profile.key;
-  wlan = profile;
-  $('wlan-status').textContent = `Applied ${wlan.ssid} · VLAN ${wlan.vlan} · ${wlan.security === 'wpa2' ? 'WPA2-Personal (AES)' : wlan.security}.`;
-  $('wlan-output').textContent = 'Ready to test the client against this profile.';
-});
-$('wlan-connect').addEventListener('click', () => {
-  let result;
-  if (!wlan) result = 'Apply a profile first.';
-  else if (!wlan.enabled) result = 'SSID unavailable. Enable the WLAN and apply the profile.';
-  else if (wlan.security !== 'wpa2') result = 'Association failed. This client expects WPA2-Personal with AES.';
-  else if (wlan.vlan !== '10') result = 'Associated, but the client cannot obtain a lease on the staff network. Check the VLAN mapping.';
-  else result = `Connected to ${wlan.ssid}\nAuthentication: WPA2-PSK / AES\nClient VLAN: 10\nIPv4 lease: 192.168.10.21/24\nQoS: ${wlan.qos}`;
-  $('wlan-output').textContent = result;
+mountWireless(() => {
+  search.value = '';
+  domainButtons.get(2).click();
+  openCommandLab(labs.find(lab => lab.id === 'wireless-troubleshooting'));
 });
 
 selectLab(current);

@@ -1,6 +1,7 @@
 import { networkLabs, helpers } from './network-labs.mjs';
+import { wirelessCli, wirelessSetupCli } from './wireless-cli.mjs';
 import { servicesLabs } from './services-labs.mjs';
-import { set, lines } from './engine.mjs';
+import { set, lines, makeSession } from './engine.mjs';
 
 export const domains = [
   {id:1, title:'Network Fundamentals', weight:20},
@@ -49,5 +50,10 @@ const extra = [
   }
 ];
 
-export const labs = [...networkLabs, ...servicesLabs, ...extra].sort((a,b)=>a.domain-b.domain);
+export const labs = [...networkLabs, ...servicesLabs, ...extra, wirelessSetupCli, wirelessCli].sort((a,b)=>a.domain-b.domain);
 export const commandCount = new Set(labs.flatMap(lab=>lab.steps.map(step=>step[1].toLowerCase()))).size;
+
+export const commandReference = labs.flatMap(lab =>
+  makeSession(lab).steps.map(({device, command, explanation, mode, index}) =>
+    ({lab, device, command, explanation, mode, index}))
+);

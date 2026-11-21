@@ -1,3 +1,5 @@
+import { moreConcepts } from './more-concepts.mjs';
+
 // Each prompt has a worked explanation and original distractors.
 export const concepts = [
  [1,'1.1','Network device roles','Which device primarily joins distinct IPv4 networks?','Router',['Layer 2 switch','Access point'],'A router selects a next hop between IP networks. A Layer 2 switch forwards Ethernet frames. A multilayer switch does both. An AP bridges wireless clients, a WLC coordinates APs, and a controller manages policy. Servers provide services and endpoints consume them. An NGFW applies application-aware policy, while an IPS can block traffic that matches a prevention rule. PoE delivers power over compatible Ethernet cabling.'],
@@ -39,5 +41,6 @@ export const concepts = [
  [6,'6.4','AI and ML in operations','Which use case is predictive rather than generative?','Forecasting link saturation from telemetry',['Drafting a change summary from a prompt','Producing an example configuration from requirements'],'Predictive ML estimates future conditions or flags anomalies. Generative AI produces content such as explanations or candidate configs. Validate outputs against telemetry, policy and device behavior.'],
  [6,'6.5','REST verbs and encoding','Which HTTP method normally reads a resource without changing it?','GET',['POST','PATCH'],'GET reads a representation. POST commonly creates or submits, PUT replaces or creates at a known URI, PATCH updates portions, and DELETE removes. APIs may use tokens, basic auth over TLS or other schemes. JSON is a common representation.'],
  [6,'6.6','Ansible and Terraform','Which tool commonly models desired infrastructure in declarative configuration and plans changes against state?','Terraform',['Ansible inventory','Syslog'],'Terraform plans and applies infrastructure changes using providers and state. Ansible uses inventories and playbooks to perform configuration and orchestration. The attached older volume also discusses Puppet and Chef.'],
- [6,'6.7','JSON types','In {"vlans":[10,20]}, what kind of value does "vlans" hold?','Array',['Object','String'],'A JSON object contains key/value pairs. Square brackets define an array. JSON also supports numbers, strings, booleans and null. JSON string values and property names use double quotes.']
+ [6,'6.7','JSON types','In {"vlans":[10,20]}, what kind of value does "vlans" hold?','Array',['Object','String'],'A JSON object contains key/value pairs. Square brackets define an array. JSON also supports numbers, strings, booleans and null. JSON string values and property names use double quotes.'],
+ ...moreConcepts
 ];

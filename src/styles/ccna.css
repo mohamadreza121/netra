@@ -1,3 +1,4 @@
+html:has(.route-ccna) { scroll-behavior:auto; }
 .route-ccna {
   --lab-bg: #101c18;
   --lab-surface: #182923;
@@ -35,7 +36,7 @@
 .ccna-views a[aria-current="page"] { background:#d6e7cf; color:#193526; }
 .ccna-search { width:min(390px,100%); color:var(--lab-quiet); font-size:.8125rem; font-weight:700; }
 .ccna-search span { display:block; margin-bottom:6px; }
-.ccna-search input, .wlan-grid input:not([type="checkbox"]), .wlan-grid select {
+.ccna-search input, .wlan-form input:not([type="checkbox"]), .wlan-form select, .wlan-scenarios select {
   width:100%; padding:11px; border:1px solid #577469; border-radius:4px; background:#0e1b16; color:var(--lab-light);
 }
 .ccna-search input::placeholder { color:#9db6a7; }
@@ -71,7 +72,7 @@
 .ccna-terminal-bar > span { color:var(--lab-quiet); font:.75rem var(--mono); padding-inline:6px; }
 #lab-devices { display:flex; gap:5px; flex-wrap:wrap; }
 .ccna-device { font:700 .8125rem var(--mono); min-height:32px; }
-#lab-output, #wlan-output { color:#deeee1; font: .875rem/1.6 var(--mono); white-space:pre-wrap; overflow-wrap:anywhere; }
+#lab-output { color:#deeee1; font: .875rem/1.6 var(--mono); white-space:pre-wrap; overflow-wrap:anywhere; }
 #lab-output { height:clamp(195px, 30vh, 325px); margin:0; padding:15px; overflow:auto; }
 #lab-form { display:flex; align-items:center; gap:7px; padding:9px; border-top:1px solid var(--lab-border); font:.8125rem var(--mono); }
 #lab-prompt { flex-shrink:0; color:var(--lab-accent); font-weight:700; }
@@ -91,7 +92,7 @@
 #lab-steps .done::marker { color:var(--lab-accent); }
 .ccna-panel-heading { margin:0 0 14px; }
 [data-panel="wlan"] { margin-top:22px; }
-.ccna-cards, .wlan-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.ccna-cards { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
 .ccna-card { display:grid; align-content:start; justify-items:start; gap:9px; padding:18px; border:1px solid var(--lab-border); border-radius:5px; background:var(--lab-surface); }
 .ccna-card h3 { color:var(--lab-light); overflow-wrap:anywhere; font-size:1.05rem; }
 .ccna-card p { color:var(--lab-quiet); line-height:1.5; }
@@ -102,12 +103,37 @@
 .ccna-feedback[data-result="correct"] { color:var(--lab-accent); }
 .ccna-card details { width:100%; min-width:0; color:var(--lab-quiet); }
 .ccna-card pre { max-width:100%; white-space:pre-wrap; overflow-wrap:anywhere; }
-.wlan-grid form { gap:12px; justify-items:stretch; }
-.wlan-grid form button { justify-self:start; }
-.wlan-grid label { display:grid; gap:5px; color:var(--lab-quiet); font-weight:700; }
-.wlan-grid .wlan-check { display:flex; align-items:center; }
+.ccna-more { margin-top:14px; }
+#concept-count { color:#abd2b7; font:.75rem var(--mono); margin:0 0 10px; }
+.wlan-scenarios { grid-template-columns:minmax(180px,.55fr) minmax(0,1fr) auto; align-items:center; gap:16px; margin-bottom:14px; }
+.wlan-scenarios > div { width:100%; }
+.wlan-scenarios label { display:block; margin-bottom:5px; }
+.wlan-workbench { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); align-items:start; gap:14px; }
+.wlan-test { display:grid; grid-template-columns:minmax(0,1fr); gap:14px; }
+.wlan-form { justify-items:stretch; gap:14px; }
+.wlan-form > button { justify-self:start; }
+.wlan-form fieldset { min-width:0; padding:12px; margin:0; border:1px solid #527265; border-radius:4px; display:grid; gap:10px; }
+.wlan-form legend { color:#c6ebcd; font-weight:700; padding-inline:4px; }
+.wlan-form label, .wlan-scenarios label { display:grid; gap:5px; color:var(--lab-quiet); font-size:.875rem; font-weight:700; }
+.wlan-form .wlan-check { display:flex; align-items:center; gap:7px; min-height:28px; }
 .wlan-check input { accent-color:var(--lab-accent); }
-#wlan-output { padding:12px; background:#0d1b13; margin:0; width:100%; }
+.wlan-pair { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.wlan-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.wlan-advanced > summary { cursor:pointer; color:#c6ebcd; min-height:34px; }
+.wlan-advanced fieldset { margin-top:10px; }
+.wlan-diagnostics { justify-items:stretch; }
+#wlan-output { list-style:none; padding:0; margin:0; display:grid; gap:6px; }
+#wlan-output li { display:grid; gap:4px; color:var(--lab-quiet); font-size:.875rem; line-height:1.45; border-left:3px solid #75c296; padding:8px 10px; background:#112018; }
+#wlan-output b { color:#c6ebcd; }
+#wlan-output li[data-state="fail"] { border-left-color:#f2a59a; }
+#wlan-output li[data-state="fail"] b { color:#ffc7bd; }
+#wlan-output li[data-state="warn"] { border-left-color:#e4c17d; }
+#wlan-output li[data-state="warn"] b { color:#f3d698; }
+.wlan-source { margin-top:12px; color:var(--lab-quiet); font-size:.875rem; line-height:1.5; }
+.wlan-source a { text-decoration:underline; }
+@media (max-width:760px) {
+  .wlan-workbench, .wlan-scenarios { grid-template-columns:minmax(0,1fr); }
+}
 .ccna-sources { margin-top:23px; color:var(--lab-quiet); font-size:.875rem; line-height:1.5; }
 .ccna-sources p { margin-top:8px; }
 .ccna-sources a { text-decoration:underline; }
@@ -116,7 +142,7 @@
   #ccna-lab-list { grid-template-columns:repeat(2,minmax(0,1fr)); max-height:240px; overflow:auto; }
 }
 @media (max-width:520px) {
-  .ccna-cards, .wlan-grid { grid-template-columns:1fr; }
+  .ccna-cards { grid-template-columns:1fr; }
   .ccna-lab-heading { flex-direction:column; }
   .ccna-views a { padding-inline:8px; }
 }
