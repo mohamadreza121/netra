@@ -15,7 +15,7 @@ Use a clean grotesk for headings, the system sans stack for supporting copy, and
 
 | Scene | Interaction |
 | --- | --- |
-| Home | Hardware appears in orbit behind the wordmark. Individual letters fall and fade as the reader leaves the hero. |
+| Home | The centered Netra wordmark splits as the rack assembles through Learn, Simulate, and Master. |
 | CCNA | The background shifts to chalk jade. A real command example bridges the landing page and the practice catalog. |
 | CCNP | Black and violet router consoles stack vertically, with verification examples for OSPF, BGP, route policy, and redistribution. |
 | LabSim | A router, switch, and host share a small topology. The full workspace preview pairs that topology with a port inspector and console. |

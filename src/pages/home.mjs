@@ -59,20 +59,7 @@ ${output}</code></pre>
 }
 
 export function home() {
-return `<section class="hero" aria-labelledby="hero-title">
-<div class="hero-art" aria-hidden="true"></div>
-<div class="frame hero-inner">
-<div class="hero-copy">
-<p class="eyebrow hero-kicker"><span class="signal"></span> CISCO NETWORKING PRACTICE</p>
-<h1 id="hero-title" aria-label="Netra"><span aria-hidden="true"><i>N</i><i>e</i><i>t</i><i>r</i><i>a</i><i>.</i></span></h1>
-<p class="tagline">Learn. Simulate. Master.</p>
-<p class="hero-description">Practice Cisco commands, build topologies, and see how the network responds.</p>
-<div class="actions"><a class="button primary" href="#ccna">Explore the tracks</a><a class="button ghost" href="/labsim/">Preview LabSim</a></div>
-</div>
-</div>
-<div class="frame hero-foot"><a href="#ccna"><span aria-hidden="true">↓</span> Scroll to explore</a><span>NETWORK + ASTRA</span></div>
-</section>
-<section class="ccna-section" id="ccna"><div class="frame section-grid">
+return `<section class="ccna-section" id="ccna"><div class="frame section-grid">
 <div class="section-copy">
 <p class="eyebrow">CCNA PRACTICE</p><h2>Build the<br>network<span>.</span></h2>
 <p>Bring up an interface. Pass traffic across a trunk. Verify a route. Get comfortable with one command set at a time.</p>

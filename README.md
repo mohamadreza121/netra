@@ -25,7 +25,7 @@ Open http://localhost:8000.
 | `src/features/labsim/` | Interactive topology and console preview |
 | `src/styles/` | Brand palette, layouts, and responsive styles |
 | `src/assets/` | Netra mark and hardware artwork |
-| `src/motion.js` | Hero scroll animation |
+| `src/motion.js` | Scroll-driven rack assembly and word transitions |
 | `scripts/build.mjs` | Generates four static routes in `dist/` |
 | `docs/design-and-roadmap.md` | Brand directions and simulator and practice implementation plan |
 

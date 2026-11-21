@@ -8,7 +8,7 @@ const links = (route) => routes.map(([path, label]) =>
   `<a href="/${path ? path + '/' : ''}" ${path === route ? 'aria-current="page"' : ''}>${label}</a>`
 ).join('');
 
-export function layout({route, title, content}) {
+export function layout({route, title, content, intro}) {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -19,16 +19,16 @@ export function layout({route, title, content}) {
 <title>${route ? title + ' · Netra' : 'Netra — Learn. Simulate. Master.'}</title>
 <link rel="icon" href="/assets/netra.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/styles/main.css">
-<script type="module" src="/motion.js"></script>
+${intro ? '<link rel="stylesheet" href="/styles/rack.css"><script type="module" src="/motion.js"></script>' : ''}
 </head>
 <body class="route-${route || 'home'}">
-<a class="skip" href="#main">Skip to content</a>
+${intro || '<a class="skip" href="#main">Skip to content</a>'}
 <header class="site-header"><div class="nav-wrap">
 <a class="brand" href="/" aria-label="Netra home">${logo}</a>
 <nav aria-label="Main navigation">${links(route)}</nav>
 <a class="header-cta" href="${route === 'labsim' ? '/' : '/labsim/'}">${route === 'labsim' ? 'Back to home' : '<span aria-hidden="true">›_</span> Open LabSim'}</a>
 </div></header>
-<main id="main">${content}</main>
+<main id="main" tabindex="-1">${content}</main>
 <footer class="site-footer"><div class="frame footer-grid">
 <div><a class="brand" href="/" aria-label="Netra home">${logo}</a><p>Learn. Simulate. Master.</p></div>
 <nav aria-label="Footer navigation">${links(route)}</nav>
