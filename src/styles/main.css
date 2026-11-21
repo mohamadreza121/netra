@@ -188,3 +188,24 @@ code, pre { font-family: var(--mono); }
   *, *::before, *::after { transition-duration: 0s !important; }
   .header-cta:active, .button:active, .lab-map button:active, #console-form button:active { transform: none; }
 }
+
+@font-face {
+  font-family: Orbitron;
+  src: url('/assets/fonts/orbitron.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Space Grotesk";
+  src: url('/assets/fonts/space-grotesk.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+}
+:root { --display: "Space Grotesk", Arial, Helvetica, sans-serif; }
+.brand { font-family: Orbitron, Arial, Helvetica, sans-serif; letter-spacing: -.055em; }
+.section-copy h2, .interior-hero h1, .outline-heading h2 {
+  font-family: var(--display);
+  letter-spacing: -.075em;
+}

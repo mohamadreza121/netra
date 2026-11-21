@@ -1,11 +1,21 @@
 const ports = count => '<span></span>'.repeat(count);
 
-function switchUnit() {
+function deviceStatus(label) {
+  return `<div class="device-status"><b class="device-label">${label}</b>
+  <div class="device-leds"><span></span><span></span><span></span></div></div>`;
+}
+
+function portBank(count, label, variant = '') {
+  return `<div class="port-bank"><div class="device-ports ${variant}">${ports(count)}</div><span class="device-label">${label}</span></div>`;
+}
+
+function switchUnit(unit) {
   return `<div class="rack-device">
     <div class="device-face">
-      <div class="device-leds"><span></span><span></span><span></span></div>
-      <div class="device-ports device-ports-dense">${ports(24)}</div>
-      <div class="device-ports device-ports-fiber">${ports(2)}</div>
+      ${deviceStatus(`SW · ${unit}`)}
+      ${portBank(12, '01–12', 'device-ports-dense')}
+      ${portBank(12, '13–24', 'device-ports-dense')}
+      ${portBank(2, 'UPLINK', 'device-ports-fiber')}
     </div>
   </div>`;
 }
@@ -30,20 +40,22 @@ export function rackHero() {
     </div>
     <div class="rack-module rack-router" data-rack-module>
       <div class="rack-device"><div class="device-face">
-        <div class="device-leds"><span></span><span></span><span></span></div>
+        ${deviceStatus('RTR · 01')}
         <div class="device-vents"></div>
-        <div class="device-ports">${ports(4)}</div>
-        <div class="device-ports device-ports-fiber">${ports(2)}</div>
+        ${portBank(1, 'CONSOLE', 'device-console-port')}
+        ${portBank(4, 'LAN / WAN')}
+        ${portBank(2, 'SFP', 'device-ports-fiber')}
       </div></div>
     </div>
     <div class="rack-module rack-switches" data-rack-module>
-      ${switchUnit()}${switchUnit()}
+      ${switchUnit('01')}${switchUnit('02')}
     </div>
     <div class="rack-module rack-firewall" data-rack-module>
       <div class="rack-device"><div class="device-face">
-        <div class="device-leds"><span></span><span></span><span></span></div>
+        ${deviceStatus('FW · 01')}
         <div class="device-vents"></div>
-        <div class="device-ports">${ports(6)}</div>
+        ${portBank(2, 'MGMT / HA', 'device-console-port')}
+        ${portBank(4, 'DATA')}
       </div></div>
     </div>
   </div>
