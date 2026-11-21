@@ -23,14 +23,82 @@ code, pre { font-family: var(--mono); }
 .frame { width: min(100% - 112px, 1280px); margin-inline: auto; }
 .skip { position: fixed; z-index: 10; left: 12px; top: 12px; transform: translateY(-150%); background: var(--acid); color: var(--pine); padding: 12px; }
 .skip:focus { transform: none; }
-.site-header { background: #111c19; border-bottom: 1px solid #ffffff22; position: relative; z-index: 2; }
+.site-header {
+  --nav-bg: #111c19;
+  --nav-border: #ffffff22;
+  --nav-ink: var(--paper);
+  --nav-muted: var(--muted);
+  --nav-accent: var(--acid);
+  --nav-button-ink: var(--acid);
+  --nav-button-bg: #1b2a21;
+  --nav-button-border: #d8f27b70;
+  --nav-button-depth: #2e4739;
+  --nav-hover-ink: #172218;
+  --nav-hover-bg: var(--acid);
+  --nav-hover-depth: #77903c;
+  --nav-palette: background-color .48s ease, border-color .48s ease, color .48s ease;
+  position: relative;
+  z-index: 2;
+  color: var(--nav-ink);
+  background-color: var(--nav-bg);
+  border-bottom: 1px solid var(--nav-border);
+  transition: var(--nav-palette);
+}
+.site-header[data-nav-theme="ccna"] {
+  --nav-bg: #c7d8c4;
+  --nav-border: #8fa990;
+  --nav-ink: #182e23;
+  --nav-muted: #34493a;
+  --nav-accent: #295031;
+  --nav-button-ink: #ecf4e9;
+  --nav-button-bg: #203d2c;
+  --nav-button-border: #54775b;
+  --nav-button-depth: #7c9980;
+  --nav-hover-ink: #f4faed;
+  --nav-hover-bg: #305d3d;
+  --nav-hover-depth: #53765a;
+}
+.site-header[data-nav-theme="ccnp"] {
+  --nav-bg: #291c38;
+  --nav-border: #5e4579;
+  --nav-ink: #f2e9f9;
+  --nav-muted: #d2c2e3;
+  --nav-accent: #d3baff;
+  --nav-button-ink: #e0cbff;
+  --nav-button-bg: #39264e;
+  --nav-button-border: #9072bb;
+  --nav-button-depth: #573c74;
+  --nav-hover-ink: #261637;
+  --nav-hover-bg: #d3baff;
+  --nav-hover-depth: #8c6dbe;
+}
+.site-header[data-nav-theme="labsim"] {
+  --nav-bg: #153831;
+  --nav-border: #42766a;
+  --nav-ink: #edf7f1;
+  --nav-muted: #b5d6c9;
+  --nav-accent: #91efce;
+  --nav-button-ink: #9bf2d3;
+  --nav-button-bg: #1c473c;
+  --nav-button-border: #60b59a;
+  --nav-button-depth: #2d6a56;
+  --nav-hover-ink: #102b23;
+  --nav-hover-bg: #91efce;
+  --nav-hover-depth: #4eab8e;
+}
+.site-header .brand-icon, .site-header .brand-period {
+  color: var(--nav-accent);
+  transition: color .48s ease;
+}
 .nav-wrap { width: min(100% - 96px, 1380px); min-height: 72px; margin: auto; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
 .brand { display: inline-flex; align-items: center; gap: 10px; font-size: 30px; line-height: 1; font-weight: 800; letter-spacing: -.09em; }
 .brand-icon { font-size: 24px; color: var(--acid); }
 .brand-period { color: var(--acid); }
 .site-header nav, .site-footer nav { display: flex; gap: clamp(16px, 3vw, 42px); align-items: center; }
 .site-header nav a, .site-footer nav a { color: var(--muted); font-size: .875rem; }
-.site-header nav a:hover, .site-footer nav a:hover, .site-header nav a[aria-current="page"] { color: var(--acid); }
+.site-header nav a { color: var(--nav-muted); transition: color .48s ease; }
+.site-header nav a:hover, .site-header nav a[aria-current="page"] { color: var(--nav-accent); }
+.site-footer nav a:hover { color: var(--acid); }
 .header-cta, .button, .lab-map button, #console-form button {
   --button-depth: #2e4739;
   --button-contact: 4px;
@@ -49,8 +117,19 @@ code, pre { font-family: var(--mono); }
   font-size: .875rem;
   white-space: nowrap;
 }
-.header-cta { color: var(--acid); background: #1b2a21; }
-.header-cta:hover, .primary { color: #172218; background: var(--acid); --button-depth: #77903c; }
+.header-cta {
+  color: var(--nav-button-ink);
+  background-color: var(--nav-button-bg);
+  border-color: var(--nav-button-border);
+  --button-depth: var(--nav-button-depth);
+  transition: var(--nav-palette), transform .18s, box-shadow .48s ease;
+}
+.header-cta:hover {
+  color: var(--nav-hover-ink);
+  background-color: var(--nav-hover-bg);
+  --button-depth: var(--nav-hover-depth);
+}
+.primary { color: #172218; background: var(--acid); --button-depth: #77903c; }
 .primary:hover { background: #ecffa4; }
 .ghost { border-color: #edf3e87d; background: #16231ee0; }
 .ghost:hover { background: #edf3e8; color: var(--pine); --button-depth: #7b9185; }

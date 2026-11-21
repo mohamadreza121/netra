@@ -3,7 +3,7 @@
   position: sticky;
   top: calc(100dvh - var(--home-nav-height));
   margin-bottom: calc(-1 * var(--home-nav-height));
-  transition: top .64s cubic-bezier(.35, 0, .3, 1);
+  transition: top .64s cubic-bezier(.35, 0, .3, 1), var(--nav-palette);
 }
 .route-home .site-header[data-docked-top] { top: 0; }
 .route-home #main, .route-home #main > section { scroll-margin-top: var(--home-nav-height); }
@@ -227,6 +227,52 @@
 }
 .device-face::before { left: 0; }
 .device-face::after { right: 0; }
+.rack-screw {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  width: clamp(6px, 1vw, 12px);
+  aspect-ratio: 1;
+  opacity: var(--screw-opacity, 1);
+  transform:
+    translate(-50%, -50%)
+    translate(calc(var(--screw-travel, 0) * var(--screw-offset)), calc(var(--screw-travel, 0) * var(--screw-rise)))
+    scale(calc(1 + var(--screw-travel, 0) * 2.6 + (1 - var(--screw-inset, 1)) * .38));
+  pointer-events: none;
+}
+.hero[data-animated] .device-face { --screw-opacity: 0; }
+.rack-screw-left { left: 1.7%; --screw-offset: -80vw; --screw-rise: -15svh; }
+.rack-screw-right { left: 98.3%; --screw-offset: 80vw; --screw-rise: 13svh; }
+.rack-screw::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 29%;
+  width: 144%;
+  height: 42%;
+  border-radius: 1px 4px 4px 1px;
+  background:
+    repeating-linear-gradient(116deg, transparent 0 2px, #080e11a0 2px 3px),
+    linear-gradient(#bcc6c0, #53615c 44%, #899387 65%, #26342e);
+  opacity: calc(1 - var(--screw-inset, 1));
+  transform: scaleX(calc(1 - var(--screw-inset, 1)));
+  transform-origin: left center;
+}
+.rack-screw-right::before {
+  transform: scaleX(calc(var(--screw-inset, 1) - 1));
+}
+.rack-screw i {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid #879992;
+  background:
+    linear-gradient(#172923,#172923) center / 65% 16% no-repeat,
+    linear-gradient(#172923,#172923) center / 16% 65% no-repeat,
+    radial-gradient(circle at 33% 29%, #c3d0c7, #758781 62%, #344740 82%);
+  box-shadow: 0 1px 2px #030807, inset 0 1px #d5e8db92;
+  transform: rotate(calc(var(--screw-travel, 0) * -720deg + (1 - var(--screw-inset, 1)) * -360deg));
+}
 .port-bank {
   position: relative;
   min-width: 0;

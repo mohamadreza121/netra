@@ -23,7 +23,7 @@ ${intro ? '<link rel="stylesheet" href="/styles/rack.css"><script type="module" 
 </head>
 <body class="route-${route || 'home'}">
 <a class="skip" href="#main">${intro ? 'Skip animation' : 'Skip to content'}</a>
-<header class="site-header"><div class="nav-wrap">
+<header class="site-header" data-nav-theme="${route || 'home'}"><div class="nav-wrap">
 <a class="brand" href="/" aria-label="Netra home">${logo}</a>
 <nav aria-label="Main navigation">${links(route)}</nav>
 <a class="header-cta" href="${route === 'labsim' ? '/' : '/labsim/'}">${route === 'labsim' ? 'Back to home' : '<span aria-hidden="true">›_</span> Open LabSim'}</a>

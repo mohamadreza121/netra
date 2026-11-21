@@ -1,4 +1,5 @@
 const ports = count => '<span></span>'.repeat(count);
+const fasteners = '<span class="rack-screw rack-screw-left"><i></i></span><span class="rack-screw rack-screw-right"><i></i></span>';
 
 function deviceStatus(label) {
   return `<div class="device-status"><b class="device-label">${label}</b>
@@ -12,6 +13,7 @@ function portBank(count, label, variant = '') {
 function switchUnit(unit) {
   return `<div class="rack-device">
     <div class="device-face">
+      ${fasteners}
       ${deviceStatus(`SW · ${unit}`)}
       ${portBank(12, '01–12', 'device-ports-dense')}
       ${portBank(12, '13–24', 'device-ports-dense')}
@@ -40,6 +42,7 @@ export function rackHero() {
     </div>
     <div class="rack-module rack-router" data-rack-module>
       <div class="rack-device"><div class="device-face">
+      ${fasteners}
         ${deviceStatus('RTR · 01')}
         <div class="device-vents"></div>
         ${portBank(1, 'CONSOLE', 'device-console-port')}
@@ -52,6 +55,7 @@ export function rackHero() {
     </div>
     <div class="rack-module rack-firewall" data-rack-module>
       <div class="rack-device"><div class="device-face">
+      ${fasteners}
         ${deviceStatus('FW · 01')}
         <div class="device-vents"></div>
         ${portBank(2, 'MGMT / HA', 'device-console-port')}

@@ -5,6 +5,7 @@ const title = hero.querySelector('.rack-title');
 const letters = [...title.querySelectorAll('i')];
 const modules = [...hero.querySelectorAll('[data-rack-module]')];
 const words = [...hero.querySelectorAll('[data-rack-word]')];
+const deviceFaces = modules.map(module => [...module.querySelectorAll('.device-face')]);
 const panels = [...document.querySelectorAll('main > section')];
 const motion = matchMedia('(prefers-reduced-motion: reduce)');
 
@@ -16,6 +17,7 @@ const chapters = [
 
 let frame;
 let navFade;
+let drawnProgress;
 const clamp = value => Math.max(0, Math.min(value, 1));
 const progressBetween = (value, start, end) => clamp((value - start) / (end - start));
 const smooth = value => value * value * (3 - 2 * value);
@@ -34,16 +36,49 @@ function dockNavigation(atTop) {
   }
 }
 
+function updateFasteners(faces, progress, dock) {
+  const flightStart = dock - .047;
+  const flightEnd = dock + .019;
+  const lockEnd = dock + .058;
+
+  faces.forEach((face, index) => {
+    const stagger = index * .012;
+    const flight = progressBetween(progress, flightStart + stagger, flightEnd + stagger);
+    const tightening = smooth(progressBetween(progress, flightEnd + stagger, lockEnd + stagger));
+    face.style.setProperty('--screw-travel', 1 - smooth(flight));
+    face.style.setProperty('--screw-inset', tightening);
+    face.style.setProperty('--screw-opacity', flight > 0 ? 1 : 0);
+  });
+
+  return progress >= lockEnd + (faces.length - 1) * .012;
+}
+
+function updateNavigationTheme(atTop, height) {
+  let theme = 'home';
+  if (atTop) {
+    for (const panel of panels) {
+      if (panel.getBoundingClientRect().top <= height + 1) theme = panel.id;
+    }
+  }
+  if (header.dataset.navTheme !== theme) header.dataset.navTheme = theme;
+}
+
 function draw() {
   frame = undefined;
   const bounds = hero.getBoundingClientRect();
   const stageHeight = stage.offsetHeight;
   const reduced = motion.matches;
-  dockNavigation(bounds.bottom <= (reduced ? header.offsetHeight : stageHeight + 1));
+  const headerHeight = header.offsetHeight;
+  const atTop = bounds.bottom <= (reduced ? headerHeight : stageHeight + 1);
+  dockNavigation(atTop);
+  updateNavigationTheme(atTop, headerHeight);
   if (reduced) return;
 
   const travel = hero.offsetHeight - stageHeight;
   const progress = travel > 0 ? clamp(-bounds.top / travel) : 0;
+  if (progress === drawnProgress) return;
+  drawnProgress = progress;
+
   const split = smooth(progressBetween(progress, .02, .19));
   const reveal = smooth(progressBetween(progress, .02, .26));
 
@@ -62,7 +97,7 @@ function draw() {
     const wordOut = smooth(progressBetween(progress, dock + .014, end));
 
     modules[index].style.setProperty('--distance', 1 - arrival);
-    modules[index].toggleAttribute('data-powered', progress >= dock);
+    modules[index].toggleAttribute('data-powered', updateFasteners(deviceFaces[index], progress, dock));
     words[index].style.opacity = wordIn * (1 - wordOut);
     words[index].style.transform = `translateY(${(1 - wordIn) * 18 - wordOut * 18}px)`;
   });
@@ -73,13 +108,14 @@ function schedule() {
 }
 
 function configure() {
+  drawnProgress = undefined;
   hero.toggleAttribute('data-animated', !motion.matches);
   if (motion.matches) {
     navFade?.cancel();
     modules.forEach(module => module.removeAttribute('data-powered'));
     stage.removeAttribute('style');
     title.removeAttribute('style');
-    [...letters, ...modules, ...words].forEach(element => element.removeAttribute('style'));
+    [...letters, ...modules, ...words, ...deviceFaces.flat()].forEach(element => element.removeAttribute('style'));
   }
   schedule();
 }
