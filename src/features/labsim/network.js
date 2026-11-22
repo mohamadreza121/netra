@@ -89,7 +89,7 @@ export function restoreLab(serialized) {
         slots.has(d.type+d.slot) || !/^[\w-]{1,32}$/.test(d.name) ||
         !Number.isFinite(d.x) || !Number.isFinite(d.y) || d.x<0 || d.x>100 || d.y<0 || d.y>100 ||
         !d.ports || !models[d.type].ports.every((name,index)=>
-          typeof d.ports[name]?.up==='boolean'||d.type==='switch'&&index>=8&&!Object.hasOwn(d.ports,name)) ||
+          typeof d.ports[name]?.up==='boolean'||!Object.hasOwn(d.ports,name)&&(d.type==='switch'&&index>=8||d.type==='phone'&&name==='Eth1')) ||
         !d.vlans || !Array.isArray(d.routes) || !d.pools || !Array.isArray(d.excluded) || !d.host || !d.radio) {
       throw Error('Invalid saved device.');
     }
@@ -296,6 +296,9 @@ export function segment(lab,source,port,learn=false,traffic='arp') {
       for(const [name,p] of Object.entries(device.ports)) {
         if(parentPort(name)===entry && (p.nativeEncapsulation?null:p.tag??null)===tag && p.up && (tag!==null || name!==entry || !Object.entries(device.ports).some(([other,value])=>parentPort(other)===entry && value.nativeEncapsulation))) receive(device,name,path,hops);
       }
+    } else if(device.type==='phone') {
+      if(entry==='Eth0'&&!device.host.wifi&&voiceVlan(lab,device)===tag)receive(device,entry,path,hops);
+      if(tag===null)transmit(device,entry==='Eth0'?'Eth1':'Eth0',null,path,hops);
     } else if(isEndpoint(device) && !device.host.wifi && voiceVlan(lab,device)===tag) {
       receive(device,entry,path,hops);
     }

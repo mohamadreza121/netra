@@ -4,7 +4,7 @@ export const models = {
   router: { title:'Router', platform:'IOS XE-style enterprise edge', prefix:'R', ports:gigabit(4), icon:'router', ios:true },
   switch: { title:'Switch', platform:'Catalyst-style multilayer switch', prefix:'SW', ports:gigabit(24,1), icon:'workgroup-switch', ios:true },
   pc: { title:'PC', platform:'Dual-stack workstation', prefix:'PC', ports:['Eth0'], icon:'pc' },
-  phone: { title:'IP phone', platform:'Cisco-style voice endpoint', prefix:'TEL', ports:['Eth0'], icon:'ip-phone' },
+  phone: { title:'IP phone', platform:'Cisco-style voice endpoint', prefix:'TEL', ports:['Eth0','Eth1'], icon:'ip-phone' },
   ap: { title:'Wi-Fi AP', platform:'Standalone or controller-managed AP', prefix:'AP', ports:['Eth0'], icon:'accesspoint' },
   wlc: { title:'Wireless controller', platform:'Catalyst 9800-style WLAN controller', prefix:'WLC', ports:['Gi0/0'], icon:'wlan-controller', ios:true },
   ise: { title:'ISE', platform:'Identity and policy services', prefix:'ISE', ports:['Eth0'], icon:'ise' },

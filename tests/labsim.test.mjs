@@ -279,3 +279,20 @@ test('a multilayer switch routes between an active SVI and a routed port', () =>
   assert.match(host('ping 198.51.100.2'),/100 percent/);
   assert.match(cli('sh ip route'),/198\.51\.100\.0\/24.*Gi0\/2/);
 });
+
+test('phone passthrough carries untagged PC traffic alongside the voice VLAN', () => {
+  const saved = branchLab();
+  delete saved.devices[3].ports.Eth1;
+  const lab = restoreLab(JSON.stringify(saved));
+  const phone = lab.devices[3];
+  const pc = addDevice(lab, 'pc');
+  cable(lab, phone, 'Eth1', pc, 'Eth0');
+  const workstation = terminal(lab, pc);
+  const handset = terminal(lab, phone);
+  assert.match(workstation('ipconfig /renew'), /192\.168\.10\./);
+  assert.match(handset('ipconfig /renew'), /192\.168\.20\./);
+  assert.match(workstation('ping 192.168.10.1'), /PC2 → TEL1 → SW1.*R1/);
+  terminal(lab, lab.devices[1])('en', 'conf t', 'int gi0/3', 'no switchport voice vlan');
+  assert.match(handset('ipconfig /renew'), /192\.168\.10\./);
+  assert.match(workstation('ipconfig /renew'), /192\.168\.10\./);
+});

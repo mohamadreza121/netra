@@ -148,7 +148,7 @@ function optionList(select,options,empty) {
 }
 function portsFor(index) {
   const device=deviceById(lab,cableSelects[index].value);
-  const options=device?models[device.type].ports.map(name=>[name,name+(peer(lab,device,name)?' · connected':'')]):[];
+  const options=device?models[device.type].ports.map(name=>[name,name+(device.type==='phone'?(name==='Eth0'?' · SW uplink':' · PC passthrough'):'')+(peer(lab,device,name)?' · connected':'')]):[];
   const control=portSelects[index];
   optionList(control,options,'Choose a device');
   if(device&&control.dataset.device!==device.id) {
