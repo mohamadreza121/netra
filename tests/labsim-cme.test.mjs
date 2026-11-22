@@ -145,3 +145,18 @@ test('CME forwards a local extension to a different registered handset',()=>{
   assert.match(tel3.run('answer'),/connected/);
   assert.match(tel3.run('show phone log'),/2002 forwarded to 2003/);
 });
+
+test('phone tftp-server configures static TFTP and can return to DHCP option 150',()=>{
+  const lab=voiceCmeLab({mode:'ready'}),[,,,tel2]=lab.devices;
+  const phone=console(lab,tel2);
+  phone.run('ip address 10.20.20.100 255.255.255.0 10.20.20.1');
+  assert.match(phone.run('boot'),/No TFTP server/);
+  assert.match(phone.run('tftp-server 999.20.20.1'),/^%/);
+  assert.match(phone.run('tftp-server '+voiceGateway),/Static TFTP server set/);
+  assert.match(phone.run('boot'),/TFTP profile downloaded[\s\S]*registered as ephone 2/);
+  assert.match(phone.run('show phone network'),/10\.20\.20\.100[\s\S]*Static override/);
+  assert.match(phone.run('no tftp-server'),/Static TFTP server cleared/);
+  assert.match(phone.run('boot'),/No TFTP server/);
+  assert.match(phone.run('ip address dhcp'),/registered as ephone 2/);
+  assert.match(phone.run('show phone network'),/DHCP option 150/);
+});

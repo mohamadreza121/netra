@@ -29,7 +29,7 @@ export const cmeIOS={
 };
 
 export const cmePhoneCommands=[
-  'boot','sccp register','sccp unregister','sccp tftp <address>','no sccp tftp',
+  'boot','sccp register','sccp unregister','tftp-server <address>','no tftp-server','sccp tftp <address>','no sccp tftp',
   'show sccp status','show phone network','show phone log','show phone calls','answer','reject'
 ];
 
@@ -53,12 +53,16 @@ export function cmePhoneCLI(lab,phone,args,c) {
     phoneSettings(phone).reason='Phone unregistered. Run sccp register.';
     return reply('SCCP registration released.');
   }
-  if(c.startsWith('sccp tftp ')||c==='no sccp tftp'){
-    if(verb==='sccp'&&ipv4(args[2])===null)return invalid('Use a valid TFTP IPv4 address.');
+  if(verb==='tftp-server'||c.startsWith('sccp tftp ')||['no tftp-server','no sccp tftp'].includes(c)){
+    const address=verb==='tftp-server'?action:args[2];
+    if(verb!=='no'&&(ipv4(address)===null||address==='0.0.0.0'))return invalid('Use a valid TFTP IPv4 address.');
     const settings=phoneSettings(phone);
-    if(verb==='no')delete settings.tftp;
-    else settings.tftp=args[2];
-    return reply('TFTP settings updated. Run boot or sccp register to apply them.');
+    if(verb==='no'){
+      delete settings.tftp;
+      return reply('Static TFTP server cleared. Run boot to use DHCP option 150.');
+    }
+    settings.tftp=address;
+    return reply('Static TFTP server set to '+address+'. Run boot or sccp register to apply it.');
   }
   if(c==='show phone network'){
     const ethernet=primaryPort(phone);

@@ -59,7 +59,7 @@ export const syntax = {
     ['Wi-Fi client','wifi scan · wifi join Netra-Staff NetraLab26 · wifi status · wifi leave','These are LabSim client controls. Quote an SSID or key with spaces. A joined client uses Wi-Fi for its lab traffic.']
   ],
   phone:[
-    ['SCCP voice endpoint','boot · show phone network · show sccp status · dial 2002 · answer · hangup · show phone log','Boot to request DHCP and register with CME. Dial from one phone and answer from the other.'],
+    ['SCCP voice endpoint','boot · tftp-server 10.20.20.1 · show phone network · show sccp status · dial 2002 · answer · hangup · show phone log','Boot to register with CME using DHCP option 150 or a static TFTP server. Dial from one phone and answer from the other.'],
     ['Network and Wi-Fi','ipconfig /renew · ipconfig · wifi scan · wifi join Netra-Staff NetraLab26','Phones can use a wired voice VLAN or join an AP.']
   ],
   wlc:[
