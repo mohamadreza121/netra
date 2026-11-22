@@ -8,11 +8,12 @@ export const apControllerCommands=[
   'no capwap ap controller ip address','show capwap client config','show capwap client rcb'
 ];
 export const wirelessIOS={
-  operational:['show wlan summary','show wlan id <id>','show ap summary','show wireless client summary',
+  operational:['show wlan summary','show wlan id <id>','show ap summary','show ap tag summary','show wireless client summary',
     'show wireless client mac-address <address> detail','show wireless tag policy detailed <name>','show wireless profile policy detailed <name>'],
   global:['wireless management interface <interface...>','wlan <name> <id> <ssid>','no wlan <name>',
     'wireless profile policy <name>','no wireless profile policy <name>','wireless tag policy <name>','no wireless tag policy <name>','ap <mac>'],
-  wlan:['shutdown','no shutdown','security wpa akm psk','no security wpa akm psk','security wpa akm dot1x','no security wpa akm dot1x',
+  wlan:['shutdown','no shutdown','security wpa wpa2 [ciphers aes]','no security wpa wpa2 [ciphers aes]',
+    'security wpa akm psk','no security wpa akm psk','security wpa akm dot1x','no security wpa akm dot1x',
     'security wpa psk set-key ascii 0 <key>','security dot1x authentication-list <name>','no security wpa'],
   policy:['shutdown','no shutdown','vlan <id>','central switching','no central switching','aaa-override','no aaa-override'],
   tag:['wlan <name> policy <name>','no wlan <name>'],
@@ -43,7 +44,8 @@ export function profiles(lab,ap) {
   const tag=own(config.aps,macAddress(ap))??'default-policy-tag';
   return Object.entries(own(config.tags,tag)??{}).flatMap(([name,policyName])=>{
     const wlan=own(config.wlans,name), policy=own(config.policies,policyName);
-    if(!wlan?.up||!policy?.up||wlan.security==='psk'&&!wlan.key)return [];
+    if(!wlan?.up||!policy?.up)return [];
+    if(wlan.security!=='open'&&(wlan.wpa2===false||wlan.aes===false||wlan.security==='psk'&&!wlan.key))return [];
     return [{...wlan,ap,wlc,policy,bridge:policy.central!==false?wlc:ap,vlan:policy.vlan,broadcast:true}];
   });
 }
@@ -99,10 +101,11 @@ export function wlcCLI(lab,d,s,args,c) {
     const rows=Object.entries(data?.wlans??{}).filter(([,x])=>name!=='id'||x.id===Number(kind)).map(([key,row])=>wlanRow(key,row));
     return reply(rows.length?['Profile  ID  SSID  Status  Security',...rows].join('\n'):'No WLANs configured.');
   }
-  if(c==='show ap summary'){
+  if(c==='show ap summary'||c==='show ap tag summary'){
+    const summary=c==='show ap summary';
     const rows=lab.devices.filter(ap=>ap.type==='ap'&&apController(lab,ap)===d)
-      .map(ap=>ap.name+'  '+macAddress(ap)+'  '+hostIp(ap)+'  RUN  '+(own(data?.aps,macAddress(ap))??'default-policy-tag'));
-    return reply(rows.length?['AP  Ethernet MAC  IPv4  CAPWAP  Policy tag',...rows].join('\n'):'No joined access points.');
+      .map(ap=>ap.name+'  '+macAddress(ap)+(summary?'  '+hostIp(ap)+'  RUN':'')+'  '+(own(data?.aps,macAddress(ap))??'default-policy-tag'));
+    return reply(rows.length?[summary?'AP  Ethernet MAC  IPv4  CAPWAP  Policy tag':'AP  Ethernet MAC  Policy tag',...rows].join('\n'):'No joined access points.');
   }
   if(c.startsWith('show wireless client ')){
     const rows=lab.devices.flatMap(host=>{
@@ -158,6 +161,8 @@ export function wlcCLI(lab,d,s,args,c) {
       row.up=c==='no shutdown';return reply();
     }
     if(c==='no security wpa'){row.security='open';return reply();}
+    if(c==='security wpa wpa2'||c==='no security wpa wpa2'){row.wpa2=verb!=='no';return reply();}
+    if(c.endsWith('security wpa wpa2 ciphers aes')){row.aes=verb!=='no';return reply();}
     if(c.startsWith('security wpa akm ')){row.security=kind;return reply();}
     if(c.startsWith('no security wpa akm ')){if(row.security===value)row.security='open';return reply();}
     if(c.startsWith('security wpa psk set-key ')){
@@ -198,6 +203,8 @@ export function wirelessRunning(d) {
     ...(cfg.management?['wireless management interface '+cfg.management]:[]),
     ...Object.entries(cfg.wlans).flatMap(([name,row])=>['wlan '+name+' '+row.id+' '+row.ssid,
       row.security==='open'?' no security wpa':' security wpa akm '+row.security,
+      ...(row.wpa2!==undefined?[' '+(row.wpa2?'':'no ')+'security wpa wpa2']:[]),
+      ...(row.aes!==undefined?[' '+(row.aes?'':'no ')+'security wpa wpa2 ciphers aes']:[]),
       ...(row.key?[' security wpa psk set-key ascii 0 [configured]']:[]),
       ...(row.authList?[' security dot1x authentication-list '+row.authList]:[]),row.up?' no shutdown':' shutdown']),
     ...Object.entries(cfg.policies).flatMap(([name,row])=>['wireless profile policy '+name,

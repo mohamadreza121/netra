@@ -51,19 +51,19 @@ export function ospfNeighbors(lab, device, interfaces) {
 
 export const ospfSnapshot = lab => new Map(lab.devices.filter(device=>device.ospf).map(device=>[device.id,ospfInterfaces(lab,device)]));
 
-const areasAt=(ports,device)=>new Set((ports.get(device.id)??[]).map(p=>p.area));
-function throughArea(areas,next,available) {
+export const areasAt=(ports,device)=>new Set((ports.get(device.id)??[]).map(p=>p.area));
+export function throughArea(areas,next,available) {
   if(areas.at(-1)===next)return areas;
   if(!areas.length)return [next];
   if(!available.has(0)||areas.includes(next)||areas.length>=3||areas.length===2&&areas[1]!==0)return null;
   return areas.at(-1)!==0&&next!==0?[...areas,0,next]:[...areas,next];
 }
 
-function pathSnapshot(lab,source,ports) {
+export function areaPaths(lab,source,ports,neighbors=ospfNeighbors) {
   const best=new Map([[source.id+':',{device:source,metric:0,areas:[],history:[source]}]]);
   const links=new Map([...ports.keys()].map(id=>{
     const device=lab.devices.find(d=>d.id===id);
-    return [id,ospfNeighbors(lab,device,ports)];
+    return [id,neighbors(lab,device,ports)];
   }));
   const visited=new Set();
   while(true) {
@@ -100,7 +100,7 @@ function advertisedExternal(lab,d,staticRoutes,borrow) {
     if(!policy||route.prefix===0||policy.process!==undefined&&policy.process!==route.process)continue;
     if(!policy.subnets&&route.prefix!==(ipv4(route.destination)>>>24<128?8:ipv4(route.destination)>>>24<192?16:24))continue;
     const filtered=applyPolicy(d,policy.map,{...route,metric:policy.metric??(route.protocol==='bgp'?1:20),tag:policy.tag??route.tag});
-    if(filtered)rows.push({...filtered,type:policy.type??2});
+    if(filtered)rows.push({...filtered,type:filtered.metricType??policy.type??2});
   }
   return rows;
 }
@@ -113,7 +113,7 @@ export function ospfRoutes(lab, source, staticRoutes, external=()=>[]) {
     const key=row.destination+'/'+row.prefix;
     if(!best.has(key)||comparePaths(row,best.get(key))<0)best.set(key,{...row,process:source.ospf.id});
   };
-  for(const current of pathSnapshot(lab,source,ports)){
+  for(const current of areaPaths(lab,source,ports)){
     const device=current.device;
     const sourceArea=current.areas[0];
     const sourceStub=source.ospf.areas?.[sourceArea]?.stub;

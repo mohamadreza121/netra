@@ -1,10 +1,11 @@
 import { deviceById, gateway, hostIp, hostPrefix, ipv4, linkUp, macAddress, networkAddress, inSubnet, prefixLength, primaryPort, requestDhcp, transaction } from './network.js';
 import { serverV6 } from './ipv6-services.js';
-import { parsePrefixV6, parseV6, formatV6, routesV6, neighborRowsV6 } from './ipv6.js';
+import { parsePrefixV6, parseV6, formatV6, routesV6, neighborRowsV6, transactionV6 } from './ipv6.js';
 import { integer, invalid, keyName, own, reply } from './cli-utils.js';
+import { clockDisplay } from './device-files.js';
 
-const protocols=['dhcp','dhcpv6','dns','http','ntp','syslog','tftp','sip','netflow'];
-const servicePorts={dns:53,dhcp:67,http:80,ntp:123,syslog:514,tftp:69,sip:5060,netflow:2055};
+const protocols=['dhcp','dhcpv6','dns','http','https','ntp','syslog','tftp','sip','netflow'];
+const servicePorts={dns:53,dhcp:67,http:80,https:443,ntp:123,syslog:514,tftp:69,sip:5060,netflow:2055};
 const label=value=>/^[a-z0-9](?:[a-z0-9.-]{0,125}[a-z0-9])?$/i.test(value??'');
 const ip=value=>ipv4(value)!==null;
 const severity=['emergencies','alerts','critical','errors','warnings','notifications','informational','debugging'];
@@ -12,9 +13,9 @@ const level=value=>integer(value,0,7)?Number(value):severity.indexOf(value?.toLo
 
 export const endpointCommands = [
   'ipconfig [/all]','ipconfig /renew','ipconfig /release','ip address <address> <prefix> [<gateway>]',
-  'ip address dhcp','no ip address','ip default-gateway <address>','ip addr','ip route','route print','arp -a',
+  'ip address dhcp','no ip address','ip default-gateway <address>','ip addr','ip addr show','ifconfig en0','ip route','route print','arp -a',
   'ipv6 address <prefix> [<gateway>]','ip -6 addr','ip -6 route','ip -6 neigh',
-  'ping <address>','ping -c <count> <address>','tracert <address>','traceroute <address>','traceroute -n <address>',
+  'ping <address>','ping -c <count> <address>','ping -q <tos> [-c <count>] <address>','ping -c <count> -q <tos> <address>','tracert <address>','traceroute <address>','traceroute -n <address>',
   'nslookup <name> [<server>]','curl <options-and-url...>',
   'tftp get <server> <file>','tftp put <server> <file> <text...>',
   'show interfaces','show ipv6 interface brief','show dhcp lease',
@@ -42,9 +43,12 @@ const store=(d,field)=>d[field]??={};
 export const serviceOn=(d,service)=>Boolean(own(d.services,service));
 
 export function servicePath(lab,client,serverIp,service, sourceAddress) {
-  if(!ip(serverIp))return {ok:false,reason:'Set a valid '+service+' server address.',path:[client.id]};
-  const packet={protocol:service==='http'?'tcp':'udp',sourcePort:49152,destinationPort:servicePorts[service]};
-  const result=transaction(lab,client,serverIp,{sourceAddress,packet,observe:service==='http'||service==='dns'});
+  const v6=parseV6(serverIp)!==null;
+  if(!ip(serverIp)&&!v6)return {ok:false,reason:'Set a valid '+service+' server address.',path:[client.id]};
+  const web=['http','https'].includes(service);
+  const packet={protocol:web?'tcp':'udp',sourcePort:49152,destinationPort:servicePorts[service]};
+  const result=v6?transactionV6(lab,client,serverIp,{sourceAddress,packet,learn:web||service==='dns'}):
+    transaction(lab,client,serverIp,{sourceAddress,packet,observe:web||service==='dns'});
   if (!result.ok)return result;
   if (!serviceOn(result.destination,service) && !(service==='ntp'&&result.destination.time?.master)) {
     return {...result,ok:false,reason:result.destination.name+' is reachable, but '+service.toUpperCase()+' is off.'};
@@ -53,7 +57,7 @@ export function servicePath(lab,client,serverIp,service, sourceAddress) {
 }
 
 export function dnsLookup(lab,d,hostname,server) {
-  const address=server??d.host.lease?.dns??d.host.dns??d.nameServer;
+  const address=server??d.host.lease?.dns??d.host.lease6?.dns??d.host.dns??d.nameServer;
   const path=servicePath(lab,d,address,'dns');
   if(!path.ok)return path;
   const record=own(path.destination.dnsRecords,hostname.toLowerCase());
@@ -100,7 +104,7 @@ export function hostNetwork(lab,d,args,connectivity) {
   }
   const address=hostIp(d);
   const dns=d.host.lease?.dns??d.host.dns;
-  if(c==='ipconfig'||c==='ipconfig /all'||c==='ip addr'||c==='show interfaces'){
+  if(c==='ipconfig'||c==='ipconfig /all'||c==='ip addr'||c==='ip addr show'||c==='ifconfig en0'||c==='show interfaces'){
     return reply([
       (d.host.wifi?'Wi-Fi':port)+' · '+macAddress(d),
       'IPv4 Address: '+(address?address+'/'+hostPrefix(d):'unassigned'),
@@ -122,10 +126,11 @@ export function hostNetwork(lab,d,args,connectivity) {
     return reply(result.ok?'Server: '+result.destination.name+'\nName: '+sub+'\nAddress: '+result.address:result.reason,result.path);
   }
   if(['ping','traceroute','tracert'].includes(verb)){
-    const count=sub==='-c'?Number(value):5;
-    if(!integer(String(count),1,20))return invalid('Use a count from 1 to 20.');
+    const option=flag=>{const index=args.indexOf(flag);return index<0?undefined:args[index+1];};
+    const count=option('-c')??'5',tos=option('-q')??'0';
+    if(!integer(count,1,20)||!integer(tos,0,255))return invalid('Use a count from 1 to 20 and TOS from 0 to 255.');
     const destination=hostIpFor(lab,d,args.at(-1));
-    return destination.ok?connectivity(lab,d,verb,destination.address,undefined,count):reply(destination.reason,destination.path);
+    return destination.ok?connectivity(lab,d,verb,destination.address,{dscp:Number(tos)>>2},Number(count)):reply(destination.reason,destination.path);
   }
   if(verb==='curl'){
     const flags=args.slice(1,-1).join(' ');
@@ -140,9 +145,10 @@ function httpRequest(lab,d,raw,head=false) {
   let target;
   try {target=new URL(raw);} catch {return invalid('Use a simulated HTTP or HTTPS URL.');}
   if(!['http:','https:'].includes(target.protocol)||target.username||target.password)return invalid('Use an HTTP or HTTPS lab endpoint.');
-  const resolved=hostIpFor(lab,d,target.hostname);
+  if(target.port)return invalid('Use the lab service’s default HTTP or HTTPS port.');
+  const resolved=hostIpFor(lab,d,target.hostname.replace(/^\[|\]$/g,''));
   if(!resolved.ok)return reply(resolved.reason,resolved.path);
-  const hit=servicePath(lab,d,resolved.address,'http');
+  const hit=servicePath(lab,d,resolved.address,target.protocol.slice(0,-1));
   if(!hit.ok)return reply(hit.reason,hit.path);
   const page=own(hit.destination.webPages,target.pathname);
   const body=page??(target.pathname==='/'?'Netra lab server':null);
@@ -154,14 +160,12 @@ function transfer(lab,d,[,action,address,name,...body]) {
   const hit=servicePath(lab,d,address,'tftp');
   if(!hit.ok)return reply(hit.reason,hit.path);
   const files=store(hit.destination,'files');
-  if(action==='put'){files[name]=body.join(' ').slice(0,2048);return reply('File written to '+hit.destination.name+'.',hit.path);}
+  if(action==='put'){
+    files[name]=body.join(' ').slice(0,2048);
+    if(hit.destination.configBackups)delete hit.destination.configBackups[name];
+    return reply('File written to '+hit.destination.name+'.',hit.path);
+  }
   return reply(own(files,name)??'Error: file not found.',hit.path);
-}
-
-export function backupConfig(lab,d,destination,configuration) {
-  const match=/^tftp:\/\/([\d.]+)\/([\w.-]+)$/i.exec(destination);
-  if(!match)return invalid('Use tftp://SERVER-IP/FILENAME.');
-  return transfer(lab,d,['tftp','put',match[1],match[2],configuration]);
 }
 
 export function appendLog(d,event) {
@@ -207,7 +211,7 @@ export function iosServices(lab,d,s,args,c) {
     const best=peers.find(peer=>peer.ok&&peer.stratum<15);
     const status=best?'Clock is synchronized, stratum '+(best.stratum+1)+', reference is '+best.address:
       d.time?.master?'Clock is synchronized to local master, stratum '+d.time.master:'Clock is unsynchronized, stratum 16';
-    if(topic==='clock')return reply(new Date().toISOString()+'\n'+status);
+    if(topic==='clock')return reply(clockDisplay(d)+'\n'+status);
     if(value==='status')return reply(status);
     return reply(['  address          st  reach',
       ...peers.map(peer=>(peer===best?'* ':'  ')+peer.address.padEnd(16)+String(peer.stratum).padEnd(4)+(peer.ok?'377':'0'))].join('\n'));
@@ -330,7 +334,9 @@ export function serverCLI(lab,d,args) {
   }
   if(cmd==='tftp'&&topic==='file'){
     if(!keyName(name))return invalid('Enter a simple file name.');
-    store(d,'files')[name]=args.slice(3).join(' ').slice(0,2048);return reply();
+    store(d,'files')[name]=args.slice(3).join(' ').slice(0,2048);
+    if(d.configBackups)delete d.configBackups[name];
+    return reply();
   }
   if(cmd==='sip'&&topic==='user'){
     if(!/^\d{2,8}$/.test(name)||!value)return invalid('Enter an extension and a lab password.');

@@ -1,6 +1,7 @@
 import { forwardsIpv4, dotted, inSubnet, ipv4, linkUp, mask, networkAddress, prefixLength, segment } from './network.js';
+import { formatV6, interfacesV6, ipv6Underlay, matchesV6, networkV6, parsePrefixV6, parseV6 } from './ipv6.js';
 import { interfaceName } from './ios.js';
-import { applyPolicy, prefixPermits, routeKey } from './route-policy.js';
+import { applyPolicy, pathPermits, prefixPermits, routeKey, routingExpression } from './route-policy.js';
 import { enter, integer, invalid, keyName, own, reply } from './cli-utils.js';
 
 const neighbors=[
@@ -11,7 +12,12 @@ const neighbors=[
   'no neighbor <peer> route-map <name> in','no neighbor <peer> route-map <name> out',
   'neighbor <peer> prefix-list <name> in','neighbor <peer> prefix-list <name> out',
   'no neighbor <peer> prefix-list <name> in','no neighbor <peer> prefix-list <name> out',
-  'neighbor <peer> route-reflector-client','no neighbor <peer> route-reflector-client'
+  'neighbor <peer> route-reflector-client','no neighbor <peer> route-reflector-client',
+  'neighbor <peer> send-community [standard]','neighbor <peer> send-community both','neighbor <peer> send-community extended','no neighbor <peer> send-community',
+  'neighbor <peer> remove-private-as [all]','no neighbor <peer> remove-private-as',
+  'neighbor <peer> default-originate','no neighbor <peer> default-originate',
+  'neighbor <peer> filter-list <name> in','neighbor <peer> filter-list <name> out',
+  'no neighbor <peer> filter-list <name> in','no neighbor <peer> filter-list <name> out'
 ];
 const af=[
   'network <network> [mask <mask>]','no network <network> [mask <mask>]',...neighbors,
@@ -22,18 +28,46 @@ const af=[
 export const bgpIOS={
   operational:['show ip bgp','show ip bgp <prefix>','show ip bgp summary','show ip bgp neighbors [<address>]',
     'show ip bgp neighbors <address> advertised-routes','show ip bgp neighbors <address> routes',
-    'show bgp ipv4 unicast','show bgp ipv4 unicast summary','show bgp ipv4 unicast neighbors [<address>]','show ip route bgp'],
+    'show bgp ipv4 unicast','show bgp ipv4 unicast summary','show bgp ipv4 unicast neighbors [<address>]','show bgp ipv4 unicast <prefix>','show bgp ipv4 unicast regexp <expression...>',
+    'show bgp ipv6 unicast','show bgp ipv6 unicast <prefix>','show bgp ipv6 unicast summary','show bgp ipv6 unicast neighbors [<address>]',
+    'show bgp ipv4 unicast vrf <name> [summary]','show bgp ipv6 unicast vrf <name> [summary]',
+    'show ip bgp peer-group [<name>]','show ip route bgp','show ipv6 route bgp'],
+  exec:['clear ip bgp <address> soft in','clear ip bgp <address> soft out'],
   global:['router bgp <asn>','no router bgp <asn>'],
   bgp:['bgp router-id <ip>','bgp default local-preference <value>','no bgp default ipv4-unicast','bgp default ipv4-unicast',
     'neighbor <peer> remote-as <asn>','no neighbor <peer>','neighbor <peer> update-source <interface...>','no neighbor <peer> update-source',
     'neighbor <peer> password <key>','no neighbor <peer> password','neighbor <peer> ebgp-multihop [<ttl>]','no neighbor <peer> ebgp-multihop',
-    'neighbor <peer> shutdown','no neighbor <peer> shutdown','address-family ipv4 [unicast]',...af],
-  bgpAf:['exit-address-family',...af]
+    'neighbor <peer> shutdown','no neighbor <peer> shutdown','neighbor <peer> description <text...>','neighbor <peer> timers <keepalive> <hold>',
+    'neighbor <group> peer-group','neighbor <peer> peer-group <group>','bgp log-neighbor-changes','no bgp log-neighbor-changes',
+    'bgp cluster-id <address>','address-family ipv4 [unicast] [vrf <name>]','address-family ipv6 [unicast] [vrf <name>]','address-family vpnv4 [unicast]',...af],
+  bgpAf:['exit-address-family','neighbor <peer> remote-as <asn>','no neighbor <peer>',...af]
 };
 
 const validIp=value=>ipv4(value)!==null;
 const classful=address=>ipv4(address)>>>24<128?8:ipv4(address)>>>24<192?16:24;
 export const bgpRouterId=d=>d.bgp?.routerId??Object.values(d.ports).map(p=>p.address).filter(Boolean).sort((a,b)=>ipv4(b)-ipv4(a))[0]??'0.0.0.0';
+
+
+const familyKey=(family,vrf)=>family+(vrf?' '+vrf:'');
+function bgpFamily(d,family='ipv4',vrf,create=false) {
+  const p=d.bgp;
+  if(!p)return null;
+  if(family==='ipv4'&&!vrf)return p;
+  const key=familyKey(family,vrf);
+  if(create){p.families??={};p.families[key]??={networks:[],neighbors:{},redistribute:{}};}
+  return own(p.families,key);
+}
+export const bgpVpnFamily=d=>bgpFamily(d,'vpnv4');
+const canonical=value=>validIp(value)?value:parseV6(value)!==null?formatV6(parseV6(value)):null;
+const validAddress=(family,value)=>family==='ipv6'?parseV6(value)!==null:validIp(value);
+const effectiveNeighbor=(cfg,address)=>{
+  const entry=own(cfg?.neighbors,address);
+  return entry?{...own(cfg.peerGroups,entry.group),...entry}:undefined;
+};
+const ipv6Port=(d,port,target)=>{
+  const parts=interfacesV6(d,port).filter(a=>!a.linkLocal);
+  return parts.find(a=>matchesV6(target,a.address,a.prefix))?.address??parts[0]?.address;
+};
 
 export function bgpConfig(d,s,args,c) {
   const no=args[0]==='no', w=no?args.slice(1):args;
@@ -46,22 +80,36 @@ export function bgpConfig(d,s,args,c) {
     d.bgp??={asn,neighbors:{},networks:[],redistribute:{}};
     return enter(s,'bgp',asn);
   }
+  if(s.mode==='exec'&&c.startsWith('clear ip bgp ')){
+    const row=effectiveNeighbor(d.bgp,sub==='ip'?w[3]:null);
+    return row?reply('Soft refresh requested. LabSim recomputes received routes from current peer policy.'):invalid('BGP neighbor is not configured.');
+  }
   if(!['bgp','bgpAf'].includes(s.mode))return null;
-  const cfg=d.bgp;
-  if(!cfg)return invalid('This BGP process no longer exists.');
-  if(c==='exit-address-family'){s.parents?.pop();return enter(s,'bgp',cfg.asn);}
-  if(verb==='address-family')return enter(s,'bgpAf',cfg.asn,true);
+  const process=d.bgp;
+  if(!process)return invalid('This BGP process no longer exists.');
+  if(c==='exit-address-family'){s.parents?.pop();return enter(s,'bgp',process.asn);}
+  if(verb==='address-family'){
+    const name=w.includes('vrf')?w.at(-1):undefined;
+    if(name&&!own(d.vrfs,name))return invalid('Create the named VRF before configuring BGP.');
+    bgpFamily(d,sub,name,true);
+    return enter(s,'bgpAf',{family:sub,vrf:name},true);
+  }
+  const {family='ipv4',vrf}=s.mode==='bgpAf'?s.current:{};
+  const cfg=bgpFamily(d,family,vrf,true);
   if(verb==='bgp'){
-    if(sub==='router-id'&&validIp(value)){cfg.routerId=value;return reply();}
-    if(sub==='default'&&value==='ipv4-unicast'){cfg.defaultIpv4=!no;return reply();}
-    if(sub==='default'&&value==='local-preference'&&integer(option,0,4294967295)){cfg.localPref=Number(option);return reply();}
+    if(sub==='router-id'&&validIp(value)){process.routerId=value;return reply();}
+    if(sub==='cluster-id'&&validIp(value)){process.clusterId=value;return reply();}
+    if(sub==='log-neighbor-changes'){process.logChanges=!no;return reply();}
+    if(sub==='default'&&value==='ipv4-unicast'){process.defaultIpv4=!no;return reply();}
+    if(sub==='default'&&value==='local-preference'&&integer(option,0,4294967295)){process.localPref=Number(option);return reply();}
     return invalid('Check the BGP process settings.');
   }
   if(verb==='network'){
-    const prefix=value==='mask'?prefixLength(option):classful(sub);
-    if(!validIp(sub)||prefix===null||networkAddress(sub,prefix)!==sub)return invalid('Enter a network and a matching mask.');
-    cfg.networks=cfg.networks.filter(r=>r.destination!==sub||r.prefix!==prefix);
-    if(!no)cfg.networks.push({destination:sub,prefix});
+    const net=family==='ipv6'?parsePrefixV6(sub):{address:sub,prefix:value==='mask'?prefixLength(option):classful(sub)};
+    if(!net||net.prefix===null||!validAddress(family,net.address)||
+      (family==='ipv6'?networkV6(net.address,net.prefix):networkAddress(net.address,net.prefix))!==net.address)return invalid('Enter a network and a matching mask or prefix length.');
+    cfg.networks=cfg.networks.filter(r=>r.destination!==net.address||r.prefix!==net.prefix);
+    if(!no)cfg.networks.push({destination:net.address,prefix:net.prefix});
     return reply();
   }
   if(verb==='redistribute'){
@@ -72,16 +120,40 @@ export function bgpConfig(d,s,args,c) {
     return reply();
   }
   if(verb==='neighbor'){
-    if(!validIp(sub))return invalid('Enter the IPv4 neighbor address.');
+    const address=canonical(sub),kind=address&&!validIp(address)?'ipv6':family;
+    if(s.mode==='bgpAf'&&address&&!validAddress(family,address))return invalid('This model uses matching transport and address families.');
+    const table=bgpFamily(d,kind,vrf,true);
+    if(value==='peer-group'){
+      table.peerGroups??={};
+      if(!address){
+        if(!keyName(sub)||option)return invalid('Use a valid peer group name.');
+        table.peerGroups[sub]??={};return reply();
+      }
+      if(!own(table.peerGroups,option))return invalid('Create the peer group first.');
+      table.neighbors[address]={...table.neighbors[address],group:option};return reply();
+    }
+    const peers=address?table.neighbors:table.peerGroups;
+    const key=address??sub;
+    if(!address&&!own(peers,key))return invalid('Enter the neighbor address or an existing peer group.');
     if(value==='remote-as'){
       if(!integer(option,1,4294967295))return invalid('Enter a valid neighbor AS.');
-      if(Object.values(d.ports).some(p=>p.address===sub))return invalid('The neighbor address belongs to this device.');
-      cfg.neighbors[sub]={...own(cfg.neighbors,sub),asn:Number(option)};return reply();
+      if(address&&Object.entries(d.ports).some(([port,p])=>p.vrf===vrf&&
+        (kind==='ipv6'?interfacesV6(d,port).some(a=>a.address===address):p.address===address)))return invalid('The neighbor address belongs to this device.');
+      peers[key]={...own(peers,key),asn:Number(option)};return reply();
     }
-    if(no&&!value){delete cfg.neighbors[sub];return reply();}
-    const neighbor=own(cfg.neighbors,sub);
+    if(no&&!value){delete peers[key];return reply();}
+    if(family==='vpnv4'&&address&&own(process.neighbors,key)&&!own(peers,key)){
+      peers[key]={...effectiveNeighbor(process,key),activate:false};
+    }
+    const neighbor=own(peers,key);
     if(!neighbor)return invalid('Configure neighbor remote-as first.');
-    if(['activate','next-hop-self','shutdown','route-reflector-client'].includes(value)){neighbor[value]=!no;return reply();}
+    if(['activate','next-hop-self','shutdown','route-reflector-client','default-originate','send-community'].includes(value)){neighbor[value]=no?false:option??true;return reply();}
+    if(value==='remove-private-as'){neighbor[value]=no?false:option??true;return reply();}
+    if(value==='description'){neighbor.description=w.slice(3).join(' ').slice(0,80);return reply();}
+    if(value==='timers'){
+      if(!integer(option,0,65535)||!integer(arg,0,65535)||Number(arg)>0&&Number(arg)<Math.max(3,Number(option)))return invalid('Check BGP keepalive and hold times.');
+      neighbor.timers=[Number(option),Number(arg)];return reply();
+    }
     if(value==='password'){if(no)delete neighbor.password;else neighbor.password=option;return reply();}
     if(value==='update-source'){
       const port=interfaceName(w.slice(3));
@@ -95,7 +167,7 @@ export function bgpConfig(d,s,args,c) {
       else return invalid('Check the weight or hop limit.');
       return reply();
     }
-    if(['prefix-list','route-map'].includes(value)&&keyName(option)) {
+    if(['prefix-list','route-map','filter-list'].includes(value)&&keyName(option)) {
       const key=value+' '+arg;
       if(no)delete neighbor[key];else neighbor[key]=option;
       return reply();
@@ -105,23 +177,27 @@ export function bgpConfig(d,s,args,c) {
   return null;
 }
 
-function nearest(rib,address) {
-  return rib.find(r=>inSubnet(address,r.destination,r.prefix));
+function nearest(rib,address,family) {
+  return rib.find(r=>(family==='ipv6'?matchesV6:inSubnet)(address,r.destination,r.prefix));
 }
+const activeFamily=(process,family,setting)=>setting.activate??(family==='ipv4'&&(process.defaultIpv4??true));
 
-function sessionFor(lab,d,remoteIp,setting,devices,ribs) {
-  if(setting.shutdown||!(setting.activate??d.bgp.defaultIpv4??true))return {state:'Idle (Admin)'};
+function sessionFor(lab,d,remoteIp,setting,devices,ribs,family,vrf) {
+  if(setting.shutdown||!activeFamily(d.bgp,family,setting))return {state:'Idle (Admin)'};
+  const v6=family==='ipv6';
+  const addresses=(node,port)=>v6?interfacesV6(node,port).map(a=>a.address):[node.ports[port]?.address];
+  const sourceOn=(node,port,target)=>v6?ipv6Port(node,port,target):node.ports[port]?.address;
   const here=ribs.get(d.id);
-  const outgoing=nearest(here,remoteIp);
+  const outgoing=nearest(here,remoteIp,family);
   const sourcePort=setting.source??outgoing?.port;
-  const source=sourcePort&&linkUp(lab,d,sourcePort)&&d.ports[sourcePort]?.address;
+  const source=sourcePort&&linkUp(lab,d,sourcePort)&&sourceOn(d,sourcePort,remoteIp);
   if(!source||!outgoing)return {state:'Active (no route)'};
-  const remote=devices.find(peer=>peer!==d&&Object.entries(peer.ports).some(([name,p])=>!p.vrf&&p.address===remoteIp&&linkUp(lab,peer,name)));
+  const remote=devices.find(peer=>peer!==d&&Object.entries(peer.ports).some(([name,p])=>p.vrf===vrf&&addresses(peer,name).includes(remoteIp)&&linkUp(lab,peer,name)));
   if(!remote)return {state:'Active (peer unavailable)'};
-  const reverse=own(remote.bgp.neighbors,source);
+  const reverse=effectiveNeighbor(bgpFamily(remote,family,vrf),source);
   const external=d.bgp.asn!==remote.bgp.asn;
   if(!reverse||reverse.asn!==d.bgp.asn||setting.asn!==remote.bgp.asn)return {state:'Active (AS or peer mismatch)'};
-  if(reverse.shutdown||!(reverse.activate??remote.bgp.defaultIpv4??true))return {state:'Idle (peer disabled)'};
+  if(reverse.shutdown||!activeFamily(remote.bgp,family,reverse))return {state:'Idle (peer disabled)'};
   if(reverse.password!==setting.password)return {state:'Active (authentication mismatch)'};
 
   // Verify the IGP forwarding path using its own RIB to avoid making a BGP session depend on itself.
@@ -131,31 +207,33 @@ function sessionFor(lab,d,remoteIp,setting,devices,ribs) {
     while(!visited.has(here.id)) {
       visited.add(here.id);
       if(here===required)return visited.size-1;
-      const row=nearest(ribs.get(here.id)??[],toIp);
+      const row=nearest(ribs.get(here.id)??[],toIp,family);
       if(!row)return 0;
-      upstream=segment(lab,here,row.port,false,'control').find(({device,port})=>device.ports[port]?.address===(row.next??toIp));
+      upstream=segment(lab,here,row.port,false,'control').find(({device,port})=>device.ports[port]?.vrf===vrf&&addresses(device,port).includes(row.next??toIp));
       if(!upstream)return 0;
       here=upstream.device;
     }
     return 0;
   };
-  const remoteCircuit=nearest(ribs.get(remote.id),source);
+  const remoteCircuit=nearest(ribs.get(remote.id),source,family);
   const remotePort=reverse.source??remoteCircuit?.port;
-  if(!remoteCircuit||remote.ports[remotePort]?.address!==remoteIp)return {state:'Active (update source mismatch)'};
+  if(!remoteCircuit||sourceOn(remote,remotePort,source)!==remoteIp)return {state:'Active (update source mismatch)'};
   const hops=lookup(d,remoteIp,remote),returnHops=lookup(remote,source,d);
   if(!hops||!returnHops||external&&(hops>(setting['ebgp-multihop']??1)||returnHops>(reverse['ebgp-multihop']??1)||
     !setting['ebgp-multihop']&&outgoing.protocol!=='connected'||!reverse['ebgp-multihop']&&remoteCircuit.protocol!=='connected')){
     return {state:'Active (transport unreachable)'};
   }
-  return {state:'Established',remote,external,source,remoteIp,setting,reverse};
+  return {state:'Established',remote,external,source,remoteIp,setting,reverse,family};
 }
 
 const comparison=(a,b)=>
   b.weight-a.weight||b.localPref-a.localPref||Number(b.local)-Number(a.local)||a.asPath.length-b.asPath.length||
-  a.origin-b.origin||a.metric-b.metric||Number(b.external)-Number(a.external)||a.nextCost-b.nextCost||ipv4(a.peer??'0.0.0.0')-ipv4(b.peer??'0.0.0.0');
+  a.origin-b.origin||a.metric-b.metric||Number(b.external)-Number(a.external)||a.nextCost-b.nextCost||comparePeer(a.peer,b.peer);
+const comparePeer=(a='',b='')=>{const x=parseV6(a),y=parseV6(b);return x!==null&&y!==null?(x<y?-1:x>y?1:0):(ipv4(a)??0)-(ipv4(b)??0);};
 
-function ownRoutes(d,rib) {
-  const {networks,redistribute,localPref=100}=d.bgp;
+function ownRoutes(d,rib,family,vrf) {
+  const {networks,redistribute}=bgpFamily(d,family,vrf);
+  const localPref=d.bgp.localPref??100;
   const routes=new Map();
   for(const r of rib) {
     const isNetwork=networks.some(n=>routeKey(n)===routeKey(r));
@@ -171,34 +249,47 @@ function ownRoutes(d,rib) {
 
 function exported(from,row,session) {
   const {external,source,setting,remote}=session;
-  if(row.history.includes(remote.id))return null;
+  if(row.history.includes(remote.id)||row.communities?.includes('no-advertise')||external&&row.communities?.includes('no-export'))return null;
+  if(!external&&row.clusters?.includes(remote.bgp.clusterId??bgpRouterId(remote)))return null;
   if(!external&&!row.local&&!row.external&&!row.fromClient&&!setting['route-reflector-client'])return null;
   if(setting['prefix-list out']&&!prefixPermits(from,setting['prefix-list out'],row))return null;
-  const candidate={...row,local:false,asPath:external?[from.bgp.asn,...row.asPath]:row.asPath,
+  if(setting['filter-list out']&&!pathPermits(from,setting['filter-list out'],row.asPath))return null;
+  const isPrivate=as=>as>=64512&&as<=65534||as>=4200000000&&as<=4294967294;
+  const remove=external&&setting['remove-private-as'];
+  const path=remove&&(remove==='all'||row.asPath.every(isPrivate))?row.asPath.filter(as=>!isPrivate(as)):row.asPath;
+  const clusters=!external&&!row.local&&!row.external?[...(row.clusters??[]),from.bgp.clusterId??bgpRouterId(from)]:row.clusters;
+  const candidate={...row,local:false,asPath:external?[from.bgp.asn,...path]:path,clusters,
     next:external||row.local||setting['next-hop-self']?source:row.next};
   const changed=applyPolicy(from,setting['route-map out'],candidate);
-  return changed?{...changed,weight:0,localPref:external?(remote.bgp.localPref??100):changed.localPref}:null;
+  return changed?{...changed,communities:setting['send-community']?changed.communities:undefined,
+    weight:0,localPref:external?(remote.bgp.localPref??100):changed.localPref}:null;
 }
 
 function imported(d,row,session,rib) {
-  const {remoteIp,external,setting}=session;
-  if(row.asPath.includes(d.bgp.asn))return null;
+  const {remoteIp,external,setting,family}=session;
+  if(row.asPath.includes(d.bgp.asn)||row.clusters?.includes(d.bgp.clusterId??bgpRouterId(d)))return null;
+  if(setting['filter-list in']&&!pathPermits(d,setting['filter-list in'],row.asPath))return null;
   if(setting['prefix-list in']&&!prefixPermits(d,setting['prefix-list in'],row))return null;
   const changed=applyPolicy(d,setting['route-map in'],{...row,weight:setting.weight??0});
   if(!changed)return null;
-  const via=nearest(rib,changed.next);
+  const via=nearest(rib,changed.next,family);
   if(!via)return null;
   return {...changed,via,peer:remoteIp,external,fromClient:Boolean(setting['route-reflector-client']),
     nextCost:via.metric??0,history:[...row.history,d.id]};
 }
 
-export function bgpSnapshot(lab,underlay) {
-  const enabled=lab.devices.filter(d=>d.bgp?.asn&&forwardsIpv4(d));
-  const ribs=new Map(lab.devices.filter(d=>d.type==='router'||d.type==='switch').map(d=>[d.id,underlay(lab,d)]));
-  const state=new Map(enabled.map(d=>[d.id,{
-    local:ownRoutes(d,ribs.get(d.id)),best:null, received:new Map(),
-    sessions:Object.entries(d.bgp.neighbors).map(([address,setting])=>({address,asn:setting.asn,...sessionFor(lab,d,address,setting,enabled,ribs)}))
-  }]));
+export function bgpSnapshot(lab,underlay,family='ipv4',vrf) {
+  const enabled=lab.devices.filter(d=>bgpFamily(d,family,vrf)&&(family==='ipv6'?d.ipv6Routing:forwardsIpv4(d)));
+  const routers=lab.devices.filter(d=>d.type==='router'||d.type==='switch');
+  const ribs=new Map(routers.map(d=>[d.id,underlay(lab,d,vrf)]));
+  const state=new Map(enabled.map(d=>{
+    const peers=bgpFamily(d,family,vrf);
+    return [d.id,{local:ownRoutes(d,ribs.get(d.id),family,vrf),best:null,received:new Map(),
+      sessions:Object.keys(peers.neighbors).map(address=>{
+        const setting=effectiveNeighbor(peers,address);
+        return {address,asn:setting.asn??'—',...sessionFor(lab,d,address,setting,enabled,ribs,family,vrf)};
+      })}];
+  }));
   for(const device of state.values())device.best=device.local;
   let signature;
   // Re-evaluate the selected paths synchronously until neighbors agree or the graph has been traversed.
@@ -211,7 +302,12 @@ export function bgpSnapshot(lab,underlay) {
         const other=peer.sessions.find(s=>s.address===session.source&&s.remote===d);
         if(!other)continue;
         const routes=[];
-        for(const row of peer.best.values()) {
+        const advertised=[...peer.best.values()];
+        const defaultNetwork=family==='ipv6'?'::':'0.0.0.0';
+        if(other.setting['default-originate']&&!peer.best.has(defaultNetwork+'/0'))advertised.push({
+          destination:defaultNetwork,prefix:0,local:true,asPath:[],weight:32768,localPref:100,origin:0,metric:0,history:[session.remote.id]
+        });
+        for(const row of advertised) {
           const sent=exported(session.remote,row,other);
           const accepted=sent&&imported(d,sent,session,ribs.get(d.id));
           if(!accepted)continue;
@@ -224,16 +320,16 @@ export function bgpSnapshot(lab,underlay) {
       return [current,best,received];
     });
     for(const [current,best,received] of updates)Object.assign(current,{best,received});
-    const next=JSON.stringify(updates.map(([,best])=>[...best.values()].map(r=>[routeKey(r),r.next,r.weight,r.localPref,r.metric,r.asPath,r.history])));
+    const next=JSON.stringify(updates.map(([,best])=>[...best.values()].map(r=>[routeKey(r),r.next,r.weight,r.localPref,r.metric,r.asPath,r.communities,r.history])));
     if(next===signature)break;
     signature=next;
   }
   return state;
 }
 
-export function bgpRoutes(lab,d,underlay) {
-  if(!d.bgp)return [];
-  const state=bgpSnapshot(lab,underlay).get(d.id);
+export function bgpRoutes(lab,d,underlay,family='ipv4',vrf) {
+  if(!bgpFamily(d,family,vrf))return [];
+  const state=bgpSnapshot(lab,underlay,family,vrf).get(d.id);
   return [...(state?.best.values()??[])].flatMap(r=>r.local?[]:[{
     destination:r.destination,prefix:r.prefix,distance:r.external?20:200,metric:r.metric,port:r.via.port,next:r.via.next??r.next,
     protocol:'bgp',tag:r.tag,process:d.bgp.asn
@@ -244,16 +340,25 @@ function renderRoutes(entries) {
   if(!entries.length)return 'No matching BGP routes.';
   return ['Network              Next Hop          Metric  LocPrf  Weight  Path',
     ...entries.map((row)=>routeKey(row).padEnd(21)+(row.next??'0.0.0.0').padEnd(18)+String(row.metric).padEnd(8)+String(row.localPref).padEnd(8)
-      +String(row.weight).padEnd(8)+row.asPath.join(' ')+(row.origin===0?' i':' ?'))].join('\n');
+      +String(row.weight).padEnd(8)+row.asPath.join(' ')+(row.origin===0?' i':' ?')+(row.communities?.length?'  Community '+row.communities.join(' '):''))].join('\n');
 }
 
 export function bgpShow(lab,d,args,underlay) {
   if(!((args[1]==='ip'&&args[2]==='bgp')||args[1]==='bgp'))return null;
-  const tail=args.slice(args[1]==='ip'?3:4);
-  const state=d.bgp&&bgpSnapshot(lab,underlay).get(d.id);
+  const family=args[2]==='ipv6'?'ipv6':'ipv4';
+  const vrf=args[4]==='vrf'?args[5]:undefined;
+  const tail=args.slice(args[1]==='ip'?3:vrf?6:4);
+  const cfg=bgpFamily(d,family,vrf);
+  const state=cfg&&bgpSnapshot(lab,family==='ipv6'?ipv6Underlay:underlay,family,vrf).get(d.id);
   if(!state)return reply('BGP is not running.');
+  if(tail[0]==='peer-group')return reply(Object.entries(cfg.peerGroups??{}).filter(([name])=>!tail[1]||tail[1]===name).
+    map(([name,row])=>name+'  Remote AS '+(row.asn??'—')+'  '+Object.entries(cfg.neighbors).filter(([,n])=>n.group===name).map(([address])=>address).join(', ')).join('\n')||'No matching BGP peer groups.');
+  if(tail[0]==='regexp'){
+    const pattern=routingExpression(tail.slice(1).join(' '));
+    return pattern?reply(renderRoutes([...state.best.values()].filter(r=>pattern.test(r.asPath.join(' '))))):invalid('Use a bounded Cisco AS-path expression.');
+  }
   if(tail[0]==='summary'){
-    return reply(['BGP router identifier '+bgpRouterId(d)+', local AS number '+d.bgp.asn,
+    return reply(['BGP router identifier '+bgpRouterId(d)+', local AS number '+d.bgp.asn+(vrf?', VRF '+vrf:''),
       'Neighbor          AS        State/PfxRcd',...state.sessions.map(s=>s.address.padEnd(18)+String(s.asn).padEnd(10)
         +(s.remote?'Established / '+(state.received.get(s.address)?.length??0):s.state))].join('\n'));
   }
@@ -271,16 +376,37 @@ export function bgpShow(lab,d,args,underlay) {
   return reply(renderRoutes([...state.best.values()].filter(r=>!filter||routeKey(r)===filter||r.destination===filter)));
 }
 
+function configurationRows(table,family,indent) {
+  const rows=[];
+  for(const [name,spec] of Object.entries(table.peerGroups??{}))rows.push(indent+'neighbor '+name+' peer-group',...neighborRows(name,spec,indent));
+  for(const [addr,spec] of Object.entries(table.neighbors))rows.push(...neighborRows(addr,spec,indent));
+  for(const network of table.networks)rows.push(indent+'network '+network.destination+(family==='ipv6'?'/'+network.prefix:' mask '+dotted(mask(network.prefix))));
+  for(const [key,row] of Object.entries(table.redistribute))rows.push(indent+'redistribute '+key+(row.process?' '+row.process:'')+(row.map?' route-map '+row.map:''));
+  return rows;
+}
+
+function neighborRows(addr,entry,indent) {
+  const stem=indent+'neighbor '+addr+' ';
+  return [
+    ...(entry.group?[stem+'peer-group '+entry.group]:[]),...(entry.asn?[stem+'remote-as '+entry.asn]:[]),
+    ...(entry.source?[stem+'update-source '+entry.source]:[]),...(entry.password?[stem+'password [configured]']:[]),
+    ...Object.entries(entry).filter(([key,value])=>!['group','asn','source','password'].includes(key)&&value!==undefined).map(([key,value])=>{
+      if(typeof value==='boolean')return value?stem+key:indent+'no neighbor '+addr+' '+key;
+      if(key.endsWith(' in')||key.endsWith(' out'))return stem+key.replace(/ (in|out)$/,' '+value+' $1');
+      return stem+key+' '+(Array.isArray(value)?value.join(' '):value);
+    })
+  ];
+}
+
 export function bgpRunning(d) {
-  const b=d.bgp;
-  if(!b)return [];
-  return ['router bgp '+b.asn,...(b.routerId?[' bgp router-id '+b.routerId]:[]),
-    ...(b.localPref!==undefined?[' bgp default local-preference '+b.localPref]:[]),...(b.defaultIpv4===false?[' no bgp default ipv4-unicast']:[]),
-    ...Object.entries(b.neighbors).flatMap(([address,n])=>[' neighbor '+address+' remote-as '+n.asn,
-      ...(n.source?[' neighbor '+address+' update-source '+n.source]:[]),...(n.password?[' neighbor '+address+' password [configured]']:[]),
-      ...Object.entries(n).filter(([key,v])=>!['asn','source','password'].includes(key)&&v!==undefined)
-        .map(([key,v])=>typeof v==='boolean'?' '+(v?'':'no ')+'neighbor '+address+' '+key:
-          ' neighbor '+address+' '+(key.endsWith(' in')||key.endsWith(' out')?key.replace(/ (in|out)$/,' '+v+' $1'):key+' '+v))]),
-    ...b.networks.map(n=>' network '+n.destination+' mask '+dotted(mask(n.prefix))),
-    ...Object.entries(b.redistribute).map(([key,r])=>' redistribute '+key+(r.process?' '+r.process:'')+(r.map?' route-map '+r.map:''))];
+  const bgp=d.bgp;
+  if(!bgp)return [];
+  return ['router bgp '+bgp.asn,...(bgp.routerId?[' bgp router-id '+bgp.routerId]:[]),...(bgp.clusterId?[' bgp cluster-id '+bgp.clusterId]:[]),
+    ...(bgp.logChanges?[' bgp log-neighbor-changes']:[]),...(bgp.localPref!==undefined?[' bgp default local-preference '+bgp.localPref]:[]),
+    ...(bgp.defaultIpv4===false?[' no bgp default ipv4-unicast']:[]),...configurationRows(bgp,'ipv4',' '),
+    ...Object.entries(bgp.families??{}).flatMap(([key,table])=>{
+      const [family,vrf]=key.split(' ');
+      return [' address-family '+family+' unicast'+(vrf?' vrf '+vrf:''),...configurationRows(table,family,'  '),' exit-address-family'];
+    })
+  ];
 }

@@ -1,4 +1,6 @@
+import { mountCommandIndex } from './command-index-ui.js';
 import { addDevice, addLink, branchLab, capacity, deviceById, deviceLimit, emptyLab, endpoint, gateway, hostIp, hostPrefix, isEndpoint, isHost, linkUp, models, peer, removeDevice, restoreLab, voiceVlan, wifiUp } from './network.js';
+import { dmvpnLab, providerVpnLab } from './vpn-labs.js';
 import { routingLab } from './routing-lab.js';
 import { enterpriseLab } from './enterprise-lab.js';
 import { apController, wifiSession } from './wireless-controller.js';
@@ -225,7 +227,10 @@ const modeLabels={user:'User EXEC',exec:'Privileged EXEC',global:'Global configu
   wlan:'WLAN profile',policy:'Wireless policy profile',tag:'Wireless policy tag',apConfig:'AP policy assignment',radius:'RADIUS server',tacacs:'TACACS+ server',
   aaagroup:'AAA server group',line:'Console and VTY lines',bgp:'BGP process',bgpAf:'BGP address family',eigrp:'EIGRP process',
   eigrpNamed:'Named EIGRP',eigrpAf:'EIGRP address family',eigrpInterface:'EIGRP interface',eigrpTopology:'EIGRP topology',
-  keyChain:'Key chain',keyChainKey:'Key chain entry',routeMap:'Route map',vrf:'VRF definition',vrfAf:'VRF address family',sla:'IP SLA operation',flowRecord:'Flow record',flowExporter:'Flow exporter',flowMonitor:'Flow monitor',pool6:'DHCPv6 pool',raGuard:'IPv6 RA Guard policy'};
+  keyChain:'Key chain',keyChainKey:'Key chain entry',routeMap:'Route map',vrf:'VRF definition',vrfAf:'VRF address family',sla:'IP SLA operation',flowRecord:'Flow record',flowExporter:'Flow exporter',flowMonitor:'Flow monitor',mst:'MST region',ospfv3:'OSPFv3 process',ospfv3Af:'OSPFv3 address family',
+  qosClassMap:'QoS class map',qosPolicy:'QoS policy map',qosClass:'QoS class',qosControl:'Control plane',acl6:'IPv6 access list',timeRange:'Time range',
+  ikeProposal:'IKEv2 proposal',ikePolicy:'IKEv2 policy',ikeProfile:'IKEv2 profile',ikeKeyring:'IKEv2 key ring',
+  ikePeer:'IKEv2 peer',ipsecTransform:'IPsec transform set',ipsecProfile:'IPsec profile',pool6:'DHCPv6 pool',raGuard:'IPv6 RA Guard policy'};
 function renderReference() {
   const device=active();
   const session=device&&sessions.get(device.id);
@@ -314,7 +319,7 @@ function renderCapacity(){
   }
 }
 function refresh() {
-  $('sim-board-name').textContent={enterprise:'Enterprise Campus',routing:'Routing Core',branch:'Branch LAN'}[lab.scenario]??'Topology';
+  $('sim-board-name').textContent={enterprise:'Enterprise Campus',routing:'Routing Core',branch:'Branch LAN','provider-vpn':'Provider VPN',dmvpn:'DMVPN Phase 3'}[lab.scenario]??'Topology';
   for(const panel of document.querySelectorAll('[data-lab-scenario]'))panel.hidden=panel.dataset.labScenario!==lab.scenario;
   renderBoard();renderCables();renderCapacity();select(selected);
 }
@@ -424,6 +429,14 @@ for(const control of document.querySelectorAll('[data-lab-command]'))control.add
   input.value=control.dataset.labCommand;
   input.focus();
 });
+$('sim-vpn-lab').addEventListener('change',event=>{
+  const choice=event.target.value;
+  event.target.value='';
+  const preset=choice==='provider-vpn'?[providerVpnLab,'Provider VPN']:choice==='dmvpn'?[dmvpnLab,'DMVPN Phase 3']:null;
+  if(!preset)return;
+  const [load,label]=preset;
+  requestChange('Load '+label+'?','This replaces the current browser workspace. You can export it first.',()=>replace(load(),label+' loaded.'));
+});
 $('sim-routing').addEventListener('click',()=>requestChange('Load Routing Core?','This replaces the current browser workspace. You can export it first.',()=>replace(routingLab(),'Routing Core loaded. Test the GRE overlay and the routes exchanged across it.')));
 $('sim-starter').addEventListener('click',()=>requestChange('Load Branch LAN?','This replaces the current browser workspace. You can export it first.',()=>replace(branchLab(),'Branch LAN loaded.')));
 $('sim-empty').addEventListener('click',()=>requestChange('Create an empty lab?','This replaces the current browser workspace. You can export it first.',()=>replace(emptyLab(),'Empty lab created.')));
@@ -458,3 +471,24 @@ new ResizeObserver(draw).observe(board);
 refresh();
 if(saved)save();
 else $('sim-save').textContent='Recovered with Branch LAN';
+
+$('ios-command-link').addEventListener('click',()=>{$('ios-commands').open=true;});
+mountCommandIndex({
+  loadExample(example){
+    const current=active();
+    const target=current?.type===example.type?current:lab.devices.find(d=>d.type===example.type);
+    if(!target){
+      $('ios-command-count').textContent='Add a '+(models[example.type]?.title??'matching device')+' to send the command to its console.';
+      return;
+    }
+    select(target.id);
+    const session=sessions.get(target.id);
+    if(session.remote||session.passwordPrompt){
+      say('Close the current SSH session or complete authentication first.');
+      return;
+    }
+    input.value=example.command;
+    say('Loaded on '+target.name+' · '+example.mode+'. Press Enter when the console is in this mode.');
+    input.focus();
+  }
+});

@@ -11,13 +11,14 @@ export const iseCommands=[
   'authorization <username> vlan <id>','authorization <username> deny',
   'show network-devices','show identities','show radius live-logs','show tacacs live-logs'
 ];
-export const identityClientCommands=['dot1x login <username> <password>','dot1x logout','dot1x status','ssh -l <username> <address> [<password>]'];
+export const identityClientCommands=['dot1x login <username> <password>','dot1x logout','dot1x status',
+  'ssh -l <username> <address> [<password>]','ssh <username-at-address>'];
 export const identityIOS={
   operational:['show ip ssh','show aaa servers','show users','show radius statistics'],
   exec:['test aaa group <group> <username> <password> legacy','test aaa group <group> <username> <password> new-code'],
   global:[
     'aaa new-model','no aaa new-model','ip ssh version 2','ip ssh time-out <seconds>','ip ssh authentication-retries <number>',
-    'ip domain name <domain>','ip domain-name <domain>','crypto key generate rsa [modulus <bits>]','crypto key zeroize rsa',
+    'ip domain name <domain>','ip domain-name <domain>','crypto key generate rsa [general-keys] [modulus <bits>]','crypto key zeroize rsa',
     'username <user> secret <value>','username <user> password <value>','username <user> privilege <level> secret <value>',
     'username <user> privilege <level> algorithm-type scrypt secret <value>','no username <user>',
     'radius server <name>','tacacs server <name>',
@@ -153,7 +154,7 @@ export function hostDot1x(lab,host,args) {
     delete port.authentication;delete host.host.lease;return reply('802.1X session cleared.');
   }
   const result=authenticate(lab,sw,'dot1x',sw.aaa?.dot1xGroup??'radius',args[2],args[3]);
-  const vlanValid=!result.vlan||vlanExists(sw,result.vlan);
+  const vlanValid=!result.vlan||vlanExists(sw,result.vlan,lab);
   const accepted=result.status==='accept'&&vlanValid;
   port.authentication={client:host.id,status:accepted?'accept':'reject',username:args[2],vlan:result.vlan};
   delete host.host.lease;
@@ -267,10 +268,10 @@ export function identityCLI(lab,d,s,args,c) {
     if(!/^[a-z0-9][a-z0-9.-]{1,125}$/i.test(fqdn))return invalid('Enter a valid lab domain.');
     aaa(d).domain=fqdn;return reply();
   }
-  if(verb==='crypto'){
+  if(verb==='crypto'&&topic==='key'){
     const config=aaa(d);
     if(topic==='key'&&value==='zeroize'){delete config.sshKey;return reply('Lab RSA key removed.');}
-    const modulus=rest[0];
+    const modulus=w.includes('modulus')?w.at(-1):undefined;
     if(!config.domain||modulus&&!integer(modulus,1024,4096))return invalid('Set ip domain name and use a modulus from 1024 to 4096.');
     config.sshKey=Number(modulus??2048);return reply('Lab RSA key generated.');
   }
@@ -358,6 +359,10 @@ export function identityRunning(d) {
 export function clientIdentity(lab,host,s,args) {
   if(args[0]==='dot1x')return hostDot1x(lab,host,args);
   if(args[0]!=='ssh')return null;
+  if(args[1]!=='-l'){
+    const direct=/^([\w.-]+)@(.+)$/.exec(args[1]);
+    return direct?beginSsh(lab,host,s,direct[1],direct[2]):invalid('Use ssh USER@ADDRESS.');
+  }
   return beginSsh(lab,host,s,args[2],args[3],args[4]);
 }
 

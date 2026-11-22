@@ -4,13 +4,15 @@ import { enter, integer, invalid, keyName, own, reply } from './cli-utils.js';
 
 export const vrfIOS={
   operational:['show vrf [<name>]','show vrf interface <interface...>','show ip vrf [<name>]','show ip vrf interfaces',
-    'show ip route vrf <name> [<address-or-protocol>]','ping vrf <name> <address> [source <address-or-interface...>]',
-    'traceroute vrf <name> <address>','ping <address> source <address-or-interface...>'],
+    'show ip route vrf <name> [<address-or-protocol>]','show ipv6 route vrf <name> [<prefix-or-protocol>]','ping vrf <name> <address> [source <address-or-interface...>]',
+    'traceroute vrf <name> <address>','ping ipv6 <address> [source <address-or-interface...>]','ping ipv6 vrf <name> <address> [source <address-or-interface...>]','ping <address> source <address-or-interface...>'],
   global:['vrf definition <name>','no vrf definition <name>','ip vrf <name>','no ip vrf <name>',
     'ip route vrf <name> <network> <mask> <next-hop> [<distance>]','no ip route vrf <name> <network> <mask> <next-hop> [<distance>]'],
   interface:['vrf forwarding <name>','no vrf forwarding [<name>]','ip vrf forwarding <name>','no ip vrf forwarding [<name>]'],
-  vrf:['rd <asn-or-ip:number>','no rd','address-family ipv4'],
-  vrfAf:['exit-address-family']
+  vrf:['route-target import <target>','route-target export <target>','route-target both <target>',
+    'no route-target import <target>','no route-target export <target>','no route-target both <target>','rd <asn-or-ip:number>','no rd','address-family ipv4','address-family ipv6'],
+  vrfAf:['exit-address-family','route-target import <target>','route-target export <target>','route-target both <target>',
+    'no route-target import <target>','no route-target export <target>','no route-target both <target>']
 };
 
 const isName=name=>keyName(name)&&name.toLowerCase()!=='global';
@@ -61,6 +63,7 @@ export function vrfCLI(d,s,args,c) {
     if(no){
       delete table[name];
       d.routes=d.routes.filter(r=>r.vrf!==name);
+      d.ipv6Routes=(d.ipv6Routes??[]).filter(r=>r.vrf!==name);
       for(const p of Object.values(d.ports))if(p.vrf===name){
         delete p.vrf;delete p.address;delete p.prefix;delete p.ipv6;delete p.ipv6Enabled;
       }
@@ -73,6 +76,17 @@ export function vrfCLI(d,s,args,c) {
     if(!own(d.vrfs,w[3]))return invalid('This VRF does not exist.');
     return setStaticRoute(d,args,w[3]);
   }
+  if(['vrf','vrfAf'].includes(s.mode)&&w[0]==='route-target'){
+    const row=own(d.vrfs,s.current);
+    if(!row||!routeDistinguisher(w[2]))return invalid('Use a route target such as 65000:10.');
+    row.targets??={};
+    for(const direction of w[1]==='both'?['import','export']:[w[1]]){
+      const entries=(row.targets[direction]??[]).filter(item=>item!==w[2]);
+      if(!no)entries.push(w[2]);
+      row.targets[direction]=entries;
+    }
+    return reply();
+  }
   if(s.mode==='vrf'){
     const table=own(d.vrfs,s.current);
     if(!table)return invalid('This VRF no longer exists.');
@@ -82,7 +96,7 @@ export function vrfCLI(d,s,args,c) {
       else return invalid('Use an RD such as 65000:10 or 192.0.2.1:10.');
       return reply();
     }
-    if(w[0]==='address-family'){table.ipv4=true;return enter(s,'vrfAf',s.current,true);}
+    if(w[0]==='address-family'){table[w[1]]=true;return enter(s,'vrfAf',s.current,true);}
   }
   if(s.mode==='vrfAf'&&c==='exit-address-family'){
     s.parents?.pop();return enter(s,'vrf',s.current);
@@ -97,13 +111,13 @@ export function vrfCLI(d,s,args,c) {
       return name+'  RD '+(row.rd??'<not set>')+'  '+(ports.map(([key])=>key).join(', ')||'No interfaces');
     }).filter(Boolean).join('\n')||'No matching VRF entries.');
   }
-  if(c.startsWith('show ip route vrf ')&&!own(d.vrfs,args[4]))return invalid('This VRF does not exist.');
+  if(/^show (?:ip|ipv6) route vrf /.test(c)&&!own(d.vrfs,args[4]))return invalid('This VRF does not exist.');
   return null;
 }
 
 export function vrfRunning(d) {
   return Object.entries(d.vrfs??{}).flatMap(([name,row])=>[
-    (row.legacy?'ip vrf ':'vrf definition ')+name,...(row.rd?[' rd '+row.rd]:[]),...(row.ipv4?[' address-family ipv4']:[])
+    (row.legacy?'ip vrf ':'vrf definition ')+name,...(row.rd?[' rd '+row.rd]:[]),...Object.entries(row.targets??{}).flatMap(([dir,entries])=>entries.map(entry=>' route-target '+dir+' '+entry)),...['ipv4','ipv6'].filter(family=>row[family]).map(family=>' address-family '+family)
   ]);
 }
 

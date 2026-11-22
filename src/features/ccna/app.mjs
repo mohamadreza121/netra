@@ -7,5 +7,6 @@ import { mountPractice } from '../practice/workspace.mjs';
 mountPractice({
   tracks:[{id:'ccna', initial:'ospf', labs, domains, commandReference, concepts}],
   openSession:openAtStep,
+  deepLinks:true,
   onWireless:mountWireless
 });

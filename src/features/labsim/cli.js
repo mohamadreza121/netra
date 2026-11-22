@@ -1,13 +1,20 @@
+import { ipsecCLI, ipsecRunning } from './ipsec.js';
+import { deviceFilesCLI, deviceFilesRunning } from './device-files.js';
+import { packetPolicyCLI, packetPolicyPort, packetPolicyPortLines, packetPolicyRunning } from './packet-policy.js';
+import { mplsCLI, mplsPort, mplsRunning } from './mpls.js';
+import { qosCLI, qosPort, qosRunning } from './qos.js';
+import { ospfv3CLI, ospfv3Port, ospfv3PortLines, ospfv3Running } from './ospfv3.js';
+import { allowVlanEdit, applyMst, campusCLI, campusPort, campusPortLines, campusRunning, editVlanDatabase, operationalPort, vlanDatabase } from './campus.js';
 import { deviceById, eigrpInputs, ipv4Underlay, gateway, hostIp, hostPrefix, ipv4, dotted, prefixLength, linkUp, models, networkAddress, ping, voiceVlan, mask } from './network.js';
 
 import { assist, resolve, tokens } from './grammar.js';
 import { commandSets, filterGrammar, grammars } from './commands.js';
 import { accessPoint, apBand, apChannel } from './ap.js';
 import { configureAcl, configureV6, diagnostic, integer, interfaceName, invalid, ospfConfig, ospfPort, portList, reply, validIp, validName, validVlan, vlanIds } from './ios.js';
-import { parseV6, pingV6 } from './ipv6.js';
+import { formatV6, interfacesV6, parseV6, pingV6 } from './ipv6.js';
 import { switchingConfig, switchingShow } from './switching.js';
 import { natConfig, natRunning, natShow } from './nat.js';
-import { backupConfig, emitLog, hostIpFor, hostNetwork, iosServices, phoneService, serverCLI, serviceRunning } from './services.js';
+import { emitLog, hostIpFor, hostNetwork, iosServices, phoneService, serverCLI, serviceRunning } from './services.js';
 import { beginSsh, clientIdentity, identityCLI, identityRunning, iseCLI, portIdentity } from './identity.js';
 import { apControllerCLI, associate, profiles, wifiSession, wirelessRunning, wlcCLI } from './wireless-controller.js';
 import { clientV6, iosV6Services, ipv6ServiceLines, ipv6ServicePort, ipv6ServicesRunning } from './ipv6-services.js';
@@ -73,7 +80,8 @@ export function terminalSession(d) {
 }
 
 function promptMode(session) {
-  return { global:'config',interface:'config-if',vlan:'config-vlan',pool:'dhcp-config',ospf:'config-router',acl:'config-acl',range:'config-if-range',line:'config-line',radius:'config-radius-server',tacacs:'config-server-tacacs',aaagroup:'config-sg',wlan:'config-wlan',policy:'config-wireless-policy',tag:'config-policy-tag',apConfig:'config-ap',bgp:'config-router',bgpAf:'config-router-af',eigrp:'config-router',eigrpNamed:'config-router',eigrpAf:'config-router-af',eigrpInterface:'config-router-af-interface',eigrpTopology:'config-router-af-topology',keyChain:'config-keychain',keyChainKey:'config-keychain-key',routeMap:'config-route-map',vrf:'config-vrf',vrfAf:'config-vrf-af',sla:'config-ip-sla',flowRecord:'config-flow-record',flowExporter:'config-flow-exporter',flowMonitor:'config-flow-monitor',pool6:'config-dhcpv6',raGuard:'config-nd-raguard' }[session.mode];
+  if(session.mode==='archive')return 'config-archive';
+  return { global:'config',interface:'config-if',vlan:'config-vlan',pool:'dhcp-config',ospf:'config-router',acl:'config-acl',range:'config-if-range',line:'config-line',radius:'config-radius-server',tacacs:'config-server-tacacs',aaagroup:'config-sg',wlan:'config-wlan',policy:'config-wireless-policy',tag:'config-policy-tag',apConfig:'config-ap',bgp:'config-router',bgpAf:'config-router-af',eigrp:'config-router',eigrpNamed:'config-router',eigrpAf:'config-router-af',eigrpInterface:'config-router-af-interface',eigrpTopology:'config-router-af-topology',keyChain:'config-keychain',keyChainKey:'config-keychain-key',routeMap:'config-route-map',vrf:'config-vrf',vrfAf:'config-vrf-af',sla:'config-ip-sla',flowRecord:'config-flow-record',flowExporter:'config-flow-exporter',flowMonitor:'config-flow-monitor',ikeProposal:'config-ikev2-proposal',ikePolicy:'config-ikev2-policy',ikeProfile:'config-ikev2-profile',ikeKeyring:'config-ikev2-keyring',ikePeer:'config-ikev2-keyring-peer',ipsecTransform:'cfg-crypto-trans',ipsecProfile:'ipsec-profile',acl6:'config-ipv6-acl',timeRange:'config-time-range',qosClassMap:'config-cmap',qosPolicy:'config-pmap',qosClass:'config-pmap-c',qosControl:'config-cp',ospfv3:'config-router',ospfv3Af:'config-router-af',mst:'config-mst',pool6:'config-dhcpv6',raGuard:'config-nd-raguard' }[session.mode];
 }
 export function prompt(d,session,lab) {
   if(session.passwordPrompt)return 'Password:';
@@ -122,16 +130,19 @@ function running(d) {
   for(const [id,name] of Object.entries(d.vlans))if(id!=='1')rows.push('vlan '+id,' name '+name,...(d.inactiveVlans?.includes(Number(id))?[' shutdown']:[]));
   if (gateway(d)) rows.push('ip default-gateway '+gateway(d));
   for (const [protocol, enabled] of Object.entries(d.discovery??{})) rows.push((enabled?'':'no ')+protocol+' run');
+  rows.push(...campusRunning(d));
   if (d.stp?.mode) rows.push('spanning-tree mode '+d.stp.mode);
   if (d.stp?.portfast) rows.push('spanning-tree portfast default');
   if (d.stp?.guard) rows.push('spanning-tree portfast bpduguard default');
-  for (const [vlan,value] of Object.entries(d.stp?.vlans??{})) rows.push('spanning-tree vlan '+vlan+' priority '+value.priority);
-  rows.push(...layer2Running(d),...serviceRunning(d),...identityRunning(d),...wirelessRunning(d),...policyRunning(d),...vrfRunning(d),...availabilityRunning(d),...flowRunning(d),...ipv6ServicesRunning(d));
+  for (const [vlan,values] of Object.entries(d.stp?.vlans??{}))for(const [key,value] of Object.entries(values))rows.push('spanning-tree vlan '+vlan+' '+key+' '+value);
+  rows.push(...deviceFilesRunning(d),...layer2Running(d),...serviceRunning(d),...identityRunning(d),...wirelessRunning(d),...policyRunning(d),...vrfRunning(d),...ospfv3Running(d),...qosRunning(d),...mplsRunning(d),...packetPolicyRunning(d),...ipsecRunning(d),...availabilityRunning(d),...flowRunning(d),...ipv6ServicesRunning(d));
   if (d.ipv4Routing!==undefined) rows.push((d.ipv4Routing?'':'no ')+'ip routing');
   if (d.dhcpDisabled) rows.push('no service dhcp');
   if (d.ipv6Routing) rows.push('ipv6 unicast-routing');
   for(const [name,p] of Object.entries(d.ports)) {
-    rows.push('interface '+name);
+    rows.push('interface '+name,...campusPortLines(p),...ospfv3PortLines(p),...packetPolicyPortLines(p));
+    for(const [dir,name] of Object.entries(p.servicePolicies??{}))rows.push(' service-policy '+dir+' '+name);
+    if(p.mpls)rows.push(' mpls ip');
     if(p.description)rows.push(' description '+p.description);
     if(p.vrf)rows.push(' vrf forwarding '+p.vrf);
     if(p.address)rows.push(` ip address ${p.address} ${dotted(mask(p.prefix))}`);
@@ -179,8 +190,8 @@ function running(d) {
         if(p.security.sticky)rows.push(' switchport port-security mac-address sticky');
         for(const address of [...(p.security.static??[]),...(p.security.sticky?p.security.learned??[]:[])])rows.push(' switchport port-security mac-address '+address);
       }
-      rows.push(' switchport mode '+p.mode);
-      if(p.mode==='trunk') {
+      rows.push(' switchport mode '+p.mode+(p.mode==='dynamic'?' '+p.dtp:''));
+      if(p.mode==='trunk'||p.mode==='dynamic') {
         if(p.native!==1)rows.push(' switchport trunk native vlan '+p.native);
         if(p.allowed)rows.push(' switchport trunk allowed vlan '+p.allowed.join(','));
       } else {
@@ -204,7 +215,7 @@ function running(d) {
   for (const [name,list] of Object.entries(d.acl??{})) {
     rows.push('ip access-list '+list.type+' '+name,...list.rules.map(rule=>' '+rule.sequence+' '+rule.raw));
   }
-  for (const r of d.ipv6Routes??[]) rows.push('ipv6 route '+r.destination+'/'+r.prefix+' '+(r.next??r.port)+(r.distance!==1?' '+r.distance:''));
+  for(const r of d.ipv6Routes??[])if(!r.ra)rows.push(['ipv6 route',r.vrf?'vrf '+r.vrf:null,r.destination+'/'+r.prefix,r.port,r.next,r.distance!==1?r.distance:null].filter(Boolean).join(' '));
   if (d.ospf) {
     const p=d.ospf;
     rows.push('router ospf '+p.id);
@@ -230,18 +241,22 @@ function running(d) {
 }
 
 function connectivity(lab,d,command,ip,options,count=5) {
-  const result=parseV6(ip)===null?ping(lab,d,ip,{...options,count}):pingV6(lab,d,ip);
+  const result=parseV6(ip)===null?ping(lab,d,ip,{...options,count}):pingV6(lab,d,ip,{...options,count});
   const path=result.path.map(id=>deviceById(lab,id)?.name).join(' → ');
   if(!result.ok)return reply(`${command==='ping'?`${'.'.repeat(count)}\nSuccess rate is 0 percent (0/${count})\n`:''}${result.reason}\nPath: ${path}`,result.path);
-  return reply((command==='ping'?`${'!'.repeat(count)}\nSuccess rate is 100 percent (${count}/${count})\n`:'')+'Path: '+path,result.path);
+  const passed=result.packets??count;
+  return reply((command==='ping'?`${'!'.repeat(passed)}${'.'.repeat(count-passed)}\nSuccess rate is ${Math.round(passed/count*100)} percent (${passed}/${count})\n`:'')+
+    'Path: '+path,result.path);
 }
 
 function show(lab,d,s,args,c) {
+  const campus=campusCLI(lab,d,s,args,c);
+  if(campus)return campus;
   if(d.type==='switch'&&(c.startsWith('show ip dhcp snooping')||c.startsWith('show ip arp inspection')))return reply(layer2Show(lab,d,args));
   if(d.type==='switch'&&['spanning-tree','etherchannel','port-security'].includes(args[1]))return reply(switchingShow(lab,d,args));
   if(args[1]==='ip'&&args[2]==='nat')return reply(natShow(d,args[3]==='statistics'));
-  const result=iosServices(lab,d,s,args,c)??identityCLI(lab,d,s,args,c)??wlcCLI(lab,d,s,args,c)??flowCLI(lab,d,s,args,c)??iosV6Services(lab,d,s,args,c)??greShow(lab,d,args,c)??vrfCLI(d,s,args,c)??availabilityCLI(lab,d,s,args,c)??policyCLI(d,s,args,c)
-    ??bgpShow(lab,d,args,ipv4Underlay)??eigrpShow(lab,d,args,eigrpInputs)??diagnostic(lab,d,s,args,c);
+  const result=iosServices(lab,d,s,args,c)??identityCLI(lab,d,s,args,c)??wlcCLI(lab,d,s,args,c)??flowCLI(lab,d,s,args,c)??iosV6Services(lab,d,s,args,c)??greShow(lab,d,args,c)??ipsecCLI(lab,d,s,args,c)??vrfCLI(d,s,args,c)??availabilityCLI(lab,d,s,args,c)??policyCLI(d,s,args,c)
+    ??qosCLI(d,s,args,c)??mplsCLI(lab,d,s,args,c)??packetPolicyCLI(d,s,args,c)??ospfv3CLI(lab,d,s,args,c)??bgpShow(lab,d,args,ipv4Underlay)??eigrpShow(lab,d,args,eigrpInputs)??diagnostic(lab,d,s,args,c);
   if (result) return result;
   if(c==='show running-config')return reply(running(d));
   if(c.startsWith('show running-config interface ')){
@@ -253,10 +268,16 @@ function show(lab,d,s,args,c) {
     ...Object.entries(d.ports).map(([n,p])=>`${n.padEnd(13)} ${(p.address??'unassigned').padEnd(16)} ${(p.up?(linkUp(lab,d,n)?'up':'down'):'administratively down').padEnd(23)} ${linkUp(lab,d,n)?'up':'down'}`)].join('\n'));
   if(c==='show interfaces status')return reply(['Port          State         VLAN / mode',
     ...Object.entries(d.ports).map(([name,p])=>`${name.padEnd(13)} ${(linkUp(lab,d,name)?'connected':p.up?'notconnect':'disabled').padEnd(13)} ${d.type==='switch'?(p.mode==='trunk'?'trunk':p.vlan+(p.voice?' / voice '+p.voice:'')):'routed'}`)].join('\n'));
-  if(args[1]==='vlan'&&d.type==='switch')return reply(['VLAN  Name              Status    Access ports',
-    ...Object.entries(d.vlans).filter(([id,name])=>!args[3]||(args[2]==='id'?String(Number(args[3]))===id:args[3]===name)).map(([id,name])=>`${id.padEnd(5)} ${name.padEnd(17)} ${d.inactiveVlans?.includes(Number(id))?'suspend  ':'active   '} ${Object.entries(d.ports).filter(([,p])=>p.mode==='access'&&(p.vlan===Number(id)||p.voice===Number(id))).map(([key])=>key).join(', ')}`)].join('\n'));
+  if(args[1]==='vlan'&&d.type==='switch'){
+    const db=vlanDatabase(lab,d);
+    return reply(['VLAN  Name              Status    Access ports',
+      ...Object.entries(db.vlans).filter(([id,name])=>!args[3]||(args[2]==='id'?String(Number(args[3]))===id:args[3]===name)).map(([id,name])=>
+        `${id.padEnd(5)} ${name.padEnd(17)} ${db.inactive.includes(Number(id))?'suspend  ':'active   '} ${Object.keys(d.ports).filter(key=>{
+          const p=operationalPort(lab,d,key);return p.mode==='access'&&(p.vlan===Number(id)||p.voice===Number(id));
+        }).join(', ')}`)].join('\n'));
+  }
   if(c==='show interfaces trunk'&&d.type==='switch')return reply(['Port     Status     Native  Allowed VLANs',
-    ...Object.entries(d.ports).filter(([,p])=>p.mode==='trunk').map(([name,p])=>`${name.padEnd(8)} ${(linkUp(lab,d,name)?'trunking':'down').padEnd(10)} ${String(p.native).padEnd(7)} ${p.allowed?.join(',')??'all'}`)].join('\n'));
+    ...Object.keys(d.ports).map(name=>[name,operationalPort(lab,d,name)]).filter(([,p])=>p.mode==='trunk').map(([name,p])=>`${name.padEnd(8)} ${(linkUp(lab,d,name)?'trunking':'down').padEnd(10)} ${String(p.native).padEnd(7)} ${p.allowed?.join(',')??'all'}`)].join('\n'));
   if(c.startsWith('show ip dhcp binding')&&d.type==='router')return reply(lab.devices.filter(x=>x.host.lease?.server===d.id&&(!args[4]||args[4]===x.host.lease.ip)).map(x=>`${x.host.lease.ip}   ${x.name}   Automatic`).join('\n')||'No DHCP bindings.');
   return invalid('That show command is unavailable on this device.');
 }
@@ -310,14 +331,16 @@ function globalConfig(lab,d,s,args,c) {
     const name=interfaceName(args.slice(args[0]==='interface'?1:2));
     const base=name?.split('.')[0];
     const physical=models[d.type].ports.includes(name);
-    const virtual=(d.type!=='wlc'&&name?.startsWith('Lo'))||(d.type==='router'&&(name?.startsWith('Tu')||name?.includes('.')&&models.router.ports.includes(base)))||
+    const virtual=(d.type==='switch'&&name?.startsWith('Po')&&integer(name.slice(2),1,48))||(d.type!=='wlc'&&name?.startsWith('Lo'))||(d.type==='router'&&(name?.startsWith('Tu')||name?.includes('.')&&models.router.ports.includes(base)))||
       (['switch','wlc'].includes(d.type)&&name?.startsWith('Vlan')&&validVlan(name.slice(4)));
     if(!physical&&!virtual)return invalid('This interface is unavailable on this device.');
     if(args[0]==='no') {
       if(!virtual)return invalid('A physical interface cannot be deleted.');
-      delete d.ports[name];return reply();
+      delete d.ports[name];
+      if(name.startsWith('Po'))for(const p of Object.values(d.ports))if(p.channel?.id===Number(name.slice(2)))delete p.channel;
+      return reply();
     }
-    if(args[0]==='default'||!d.ports[name])d.ports[name]=physical?{up:d.type!=='router',mode:'access',vlan:1,native:1}:{up:!name.startsWith('Vlan')};
+    if(args[0]==='default'||!d.ports[name])d.ports[name]=physical?{up:d.type!=='router',mode:'access',vlan:1,native:1}:{up:!name.startsWith('Vlan'),...(name.startsWith('Po')?{mode:'access',vlan:1,native:1}:{})};
     if(args[0]==='interface'){s.current=name;s.mode='interface';}
     return reply();
   }
@@ -335,9 +358,17 @@ function globalConfig(lab,d,s,args,c) {
     const switching=layer2Config(d,null,args,vlanIds)??switchingConfig(d,null,args,c);
     if(switching!==null)return switching?invalid(switching):reply();
     if (c.startsWith('vlan ')&&validVlan(args[1])) {
-      s.current=Number(args[1]);d.vlans[s.current]??='VLAN'+s.current;s.mode='vlan';return reply();
+      if(!allowVlanEdit(d))return invalid('VTP client mode prevents local VLAN changes.');
+      s.current=Number(args[1]);
+      if(!Object.hasOwn(vlanDatabase(lab,d).vlans,s.current)){editVlanDatabase(lab,d);d.vlans[s.current]='VLAN'+s.current;}
+      s.mode='vlan';return reply();
     }
-    if (c.startsWith('no vlan ')&&validVlan(args[2])&&Number(args[2])!==1) {delete d.vlans[Number(args[2])];return reply();}
+    if (c.startsWith('no vlan ')&&validVlan(args[2])&&Number(args[2])!==1) {
+      if(!allowVlanEdit(d))return invalid('VTP client mode prevents local VLAN changes.');
+      const id=Number(args[2]);
+      if(Object.hasOwn(vlanDatabase(lab,d).vlans,id)){editVlanDatabase(lab,d);delete d.vlans[id];}
+      return reply();
+    }
     if (c==='no ip default-gateway') {delete d.host.gateway;return reply();}
     if (c.startsWith('ip default-gateway ')&&validIp(args[2])) {d.host.gateway=args[2];return reply();}
   }
@@ -397,7 +428,7 @@ function portConfig(lab,d,name,args,c) {
     if(changed)emitLog(lab,d,5,'%LINK-5-CHANGED: Interface '+name+' changed state to '+(no?'up':'administratively down'));
     return reply();
   }
-  const auth=portIdentity(d,name,args,c)??vrfPort(d,name,args,c)??availabilityPort(d,name,args,c)??grePort(d,name,args,c)??flowPort(d,p,args,c)??ipv6ServicePort(lab,d,name,args,c)??policyPort(d,p,args,c);
+  const auth=portIdentity(d,name,args,c)??vrfPort(d,name,args,c)??availabilityPort(d,name,args,c)??grePort(d,name,args,c)??flowPort(d,p,args,c)??ipv6ServicePort(lab,d,name,args,c)??policyPort(d,p,args,c)??campusPort(d,name,args,c)??ospfv3Port(d,name,args)??qosPort(d,p,args)??mplsPort(d,p,args,c)??packetPolicyPort(d,p,args);
   if(auth)return auth;
   if(words[0]==='description') {if(no)delete p.description;else p.description=args.slice(1).join(' ').slice(0,80);return reply();}
   if(words[0]==='speed' && ['auto','10','100','1000'].includes(words[1])) {p.speed=words[1];return reply();}
@@ -467,13 +498,8 @@ function portConfig(lab,d,name,args,c) {
   return invalid('Check the interface configuration arguments.');
 }
 
-function saveCommand(d,args,c) {
-  if(c==='copy running-config startup-config'||c==='write memory') {d.startup=running(d);return reply('Building configuration...\n[OK]');}
-  return null;
-}
-
 export function consoleEcho(input) {
-  if(/^\s*(?:ssh|dot1x login|wifi join|sip (?:register|user)|identity user|username|key |network-device|test aaa|.*\bpassword\b|security wpa psk set-key)\b/i.test(input)){
+  if(/^\s*(?:en(?:able)? sec(?:ret)?|ssh|dot1x login|wifi join|sip (?:register|user)|identity user|username|key |pre-shared-key|ip nhrp authentication|network-device|test aaa|.*\bpassword\b|security wpa psk set-key)\b/i.test(input)){
     return input.trim().split(/\s+/)[0]+' · [lab credentials hidden]';
   }
   return input;
@@ -481,8 +507,12 @@ export function consoleEcho(input) {
 
 export function execute(lab,d,s,input) {
   if(s.passwordPrompt){
-    const {user,address}=s.passwordPrompt;
+    const {kind,user,address}=s.passwordPrompt;
     delete s.passwordPrompt;
+    if(kind==='enable'){
+      if(input!==d.enableSecret)return invalid('Access denied.');
+      s.mode='exec';return reply();
+    }
     return beginSsh(lab,d,s,user,address,input);
   }
   if(s.remote){
@@ -518,31 +548,47 @@ export function execute(lab,d,s,input) {
   const c=args.join(' ').toLowerCase();
   s.history.push(consoleEcho(raw));s.history=s.history.slice(-50);
   if(s.mode==='endpoint')return runEndpoint(lab,d,s,args,c);
-  if(c==='enable'){s.mode='exec';return reply();}
+  if(c==='enable'){
+    if(d.enableSecret)s.passwordPrompt={kind:'enable'};
+    else s.mode='exec';
+    return reply();
+  }
   if(c==='disable'){s.mode='user';return reply();}
   if(c==='configure terminal'){s.mode='global';return reply();}
-  if(c==='exit'||c==='end')return leave(s,c==='end');
+  if(c==='exit'||c==='end'){
+    if(s.mode==='mst')applyMst(d,s);
+    return leave(s,c==='end');
+  }
   if(args[0]==='do')args.shift();
   const command=args.join(' ').toLowerCase();
+  const files=deviceFilesCLI(lab,d,s,args,command,running,execute);
+  if(files)return files;
   if(args[0]==='show')return show(lab,d,s,args,command);
   if(['ping','traceroute'].includes(args[0])){
-    const vrf=args[1]==='vrf'?args[2]:undefined;
-    const index=vrf?3:1;
+    const start=args[1]==='ipv6'?2:1;
+    const vrf=args[start]==='vrf'?args[start+1]:undefined;
+    const index=vrf?start+2:start;
     if(vrf&&!own(d.vrfs,vrf))return invalid('This VRF does not exist.');
-    const expression=args[index+1]==='source'?args.slice(index+2):null;
-    const sourceAddress=expression&&(validIp(expression[0])?expression[0]:d.ports[interfaceName(expression)]?.address);
-    if(expression&&(!sourceAddress||!Object.entries(d.ports).some(([name,p])=>p.address===sourceAddress&&p.vrf===vrf&&linkUp(lab,d,name))))return invalid('Source must be an active IPv4 address in this routing table.');
-    if(vrf&&!validIp(args[index]))return invalid('Use an IPv4 address for this VRF.');
-    const destination=hostIpFor(lab,d,args[index]);
-    return destination.ok?connectivity(lab,d,args[0],destination.address,{vrf,sourceAddress:sourceAddress||undefined}):reply(destination.reason,destination.path);
+    const expression=args[index+1]==='source'?args.slice(index+2).filter(word=>word.toLowerCase()!=='numeric'):null;
+    const port=expression?interfaceName(expression):undefined;
+    const address=args[index],v6=parseV6(address)!==null;
+    const ipv6Source=expression?.length===1?parseV6(expression[0]):null;
+    const sourceAddress=expression?(v6?(ipv6Source!==null?formatV6(ipv6Source):interfacesV6(d,port).find(a=>!a.linkLocal)?.address):
+      validIp(expression[0])?expression[0]:d.ports[port]?.address):undefined;
+    if(expression&&(!sourceAddress||!Object.entries(d.ports).some(([name,p])=>p.vrf===vrf&&linkUp(lab,d,name)&&
+      (v6?interfacesV6(d,name).some(a=>a.address===sourceAddress):p.address===sourceAddress))))return invalid('Source must be an active address in this routing table.');
+    if(start===2&&!v6)return invalid('Enter an IPv6 destination.');
+    const option=name=>{const i=args.indexOf(name,index+1);return i<0?undefined:args[i+1];};
+    const repeat=option('repeat')??'5',size=option('size')??'84',tos=option('tos')??'0';
+    if(!integer(repeat,1,100)||!integer(size,36,18024)||!integer(tos,0,255))return invalid('Check the repeat count, packet size or IP TOS.');
+    const destination=hostIpFor(lab,d,address);
+    return destination.ok?connectivity(lab,d,args[0],destination.address,{vrf,sourceAddress,sourcePort:port,dscp:Number(tos)>>2,bytes:Number(size)},Number(repeat)):
+      reply(destination.reason,destination.path);
   }
-  const extension=iosServices(lab,d,s,args,command)??identityCLI(lab,d,s,args,command)??wlcCLI(lab,d,s,args,command)
-    ??policyCLI(d,s,args,command)??flowCLI(lab,d,s,args,command)??iosV6Services(lab,d,s,args,command)??availabilityCLI(lab,d,s,args,command)??vrfCLI(d,s,args,command)??bgpConfig(d,s,args,command)??eigrpConfig(d,s,args,command);
+  const extension=campusCLI(lab,d,s,args,command)??iosServices(lab,d,s,args,command)??identityCLI(lab,d,s,args,command)??wlcCLI(lab,d,s,args,command)
+    ??policyCLI(d,s,args,command)??flowCLI(lab,d,s,args,command)??iosV6Services(lab,d,s,args,command)??availabilityCLI(lab,d,s,args,command)??vrfCLI(d,s,args,command)??qosCLI(d,s,args,command)??mplsCLI(lab,d,s,args,command)??packetPolicyCLI(d,s,args,command)??ipsecCLI(lab,d,s,args,command)??ospfv3CLI(lab,d,s,args,command)??bgpConfig(d,s,args,command)??eigrpConfig(d,s,args,command);
   if(extension)return extension;
   if(s.mode==='exec'){
-    const saved=saveCommand(d,args,c);
-    if(saved)return saved;
-    if(c.startsWith('copy running-config '))return backupConfig(lab,d,args[2],running(d));
     if(c==='clear ip nat translation *'){if(d.nat)d.nat.translations=[];return reply();}
     if(c==='clear arp-cache'||c==='clear ip arp') {d.arp={};return reply();}
     if(c.startsWith('clear ip arp ')) {if(d.arp)delete d.arp[args[3]];return reply();}
@@ -570,6 +616,8 @@ export function execute(lab,d,s,input) {
     return configureAcl(d,s.current,list.type,args);
   }
   if(s.mode==='vlan'){
+    if(!allowVlanEdit(d))return invalid('VTP client mode prevents local VLAN changes.');
+    editVlanDatabase(lab,d);
     if(args[0]==='name'){d.vlans[s.current]=args.slice(1).join(' ').slice(0,32);return reply();}
     d.inactiveVlans=(d.inactiveVlans??[]).filter(id=>id!==s.current);
     if(args[0]==='shutdown')d.inactiveVlans.push(s.current);

@@ -1,3 +1,5 @@
+import { formatV6, matchesV6, parsePrefixV6, parseV6 } from './ipv6.js';
+import { permittedAt } from './packet-policy.js';
 import { ipv4 } from './network.js';
 
 function operand(words) {
@@ -10,6 +12,16 @@ function operand(words) {
   if (ipv4(address)===null) return null;
   const wildcard=ipv4(words[0])===null?'0.0.0.0':words.shift();
   return {address,wildcard};
+}
+
+function operand6(words) {
+  const value=words.shift()?.toLowerCase();
+  if(value==='any')return {any:true};
+  if(value==='host'){
+    const host=parseV6(words.shift());
+    return host===null?null:{address:formatV6(host),prefix:128};
+  }
+  return parsePrefixV6(value);
 }
 
 const ports={ssh:22,telnet:23,www:80,http:80,https:443,domain:53,'bootps':67,'bootpc':68,tftp:69,ntp:123,
@@ -32,18 +44,25 @@ export function parseRule(type, args, sequence) {
   if (action==='remark' && words.length) return {sequence, action, raw:args.join(' ')};
   if (!['permit','deny'].includes(action)) return null;
   const protocol=type==='standard'?'ip':words.shift()?.toLowerCase();
-  if (!['ip','icmp','tcp','udp','ospf','eigrp','gre'].includes(protocol)) return null;
-  const source=operand(words);
+  if (!(type==='ipv6'?['ipv6','icmp','tcp','udp','ospf','eigrp','gre','esp']:['ip','icmp','tcp','udp','ospf','eigrp','gre','esp']).includes(protocol)) return null;
+  const address=type==='ipv6'?operand6:operand;
+  const source=address(words);
   const transport=['tcp','udp'].includes(protocol);
   const sourcePort=transport?service(words):undefined;
-  const destination=type==='standard'?{any:true}:operand(words);
+  const destination=type==='standard'?{any:true}:address(words);
   const destinationPort=transport?service(words):undefined;
-  const icmp=protocol==='icmp'&&['echo','echo-reply'].includes(words[0]?.toLowerCase())?words.shift().toLowerCase():undefined;
+  const icmp=protocol==='icmp'&&['echo','echo-reply','nd-ns','nd-na','router-solicitation','router-advertisement','packet-too-big'].includes(words[0]?.toLowerCase())?words.shift().toLowerCase():undefined;
   const established=protocol==='tcp'&&words[0]?.toLowerCase()==='established';
   if(established)words.shift();
-  if (['log','log-input'].includes(words[0]?.toLowerCase())) words.shift();
+  let timeRange,logged=false;
+  while(words.length){
+    const token=words.shift()?.toLowerCase();
+    if(token==='time-range'&&!timeRange&&/^[a-z][a-z0-9_.-]{0,47}$/i.test(words[0]??''))timeRange=words.shift();
+    else if(['log','log-input'].includes(token)&&!logged)logged=true;
+    else return null;
+  }
   if (!source || !destination || sourcePort===null || destinationPort===null || words.length) return null;
-  return {sequence, action, protocol, source, destination, sourcePort,destinationPort,established,icmp,hits:0,raw:args.join(' ')};
+  return {sequence, action, protocol, source, destination, sourcePort,destinationPort,established,icmp,timeRange,logged,hits:0,raw:args.join(' ')};
 }
 
 function matches(operand,address) {
@@ -64,14 +83,16 @@ function matchesPort(condition,value) {
   }
 }
 
-export function allowsTraffic(device,listName,source,destination,packet,count=true,missing=false) {
-  const list=listName&&Object.hasOwn(device.acl??{},listName)&&device.acl[listName];
+export function allowsTraffic(device,listName,source,destination,packet,count=true,missing=false,family='ip') {
+  const table=family==='ipv6'?device.acl6:device.acl;
+  const list=listName&&Object.hasOwn(table??{},listName)&&table[listName];
   if(!list)return missing;
-  const rule=list.rules.find(row=>(row.protocol==='ip'||row.protocol===packet.protocol)
-    &&(!row.icmp||row.icmp===packet.icmp)&&(!row.established||packet.established)
-    &&matches(row.source,source)&&matches(row.destination,destination)
+  const contains=family==='ipv6'?(operand,address)=>operand.any||matchesV6(address,operand.address,operand.prefix):matches;
+  const rule=list.rules.find(row=>(row.protocol===family||row.protocol===packet.protocol)
+    &&(!row.icmp||row.icmp===packet.icmp)&&(!row.established||packet.established)&&permittedAt(device,row.timeRange)
+    &&contains(row.source,source)&&contains(row.destination,destination)
     &&matchesPort(row.sourcePort,packet.sourcePort)&&matchesPort(row.destinationPort,packet.destinationPort));
-  if(!rule)return false;
+  if(!rule)return family==='ipv6'&&packet.protocol==='icmp'&&['nd-na','nd-ns'].includes(packet.icmp);
   if(count)rule.hits++;
   return rule.action==='permit';
 }

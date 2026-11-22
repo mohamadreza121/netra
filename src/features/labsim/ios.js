@@ -1,4 +1,5 @@
 import { deviceById, gateway, hostIp, inSubnet, ipv4, linkUp, macAddress, models, networkAddress, peer, prefixLength, routeTable } from './network.js';
+import { operationalPort, vlanDatabase } from './campus.js';
 import { areaId, ospfInterfaces, ospfNeighbors, ospfSnapshot, routerId } from './ospf.js';
 import { parseRule } from './acl.js';
 import { interfacesV6, neighborRowsV6, networkV6, parsePrefixV6, parseV6, routesV6, formatV6 } from './ipv6.js';
@@ -14,6 +15,8 @@ export function interfaceName(words) {
   const name=words.join('').toLowerCase();
   const port=/^([a-z]+)(\d+\/\d+(?:\.[1-9]\d{0,3})?)$/.exec(name);
   if (port && 'gigabitethernet'.startsWith(port[1])) return 'Gi'+port[2];
+  const channel=/^po(?:rt-channel)?(\d{1,2})$/.exec(name);
+  if(channel)return 'Po'+Number(channel[1]);
   const virtual=/^(lo(?:opback)?|vl(?:an)?|tu(?:nnel)?)(\d{1,4})$/.exec(name);
   if (virtual) return (virtual[1].startsWith('lo')?'Lo':virtual[1].startsWith('tu')?'Tu':'Vlan')+Number(virtual[2]);
   return null;
@@ -63,7 +66,6 @@ const rows = (header, entries, empty='No entries.')=>reply(entries.length?[heade
 
 export function diagnostic(lab,d,s,args,c) {
   if (c==='show version') return reply(`Netra LabSim IOS-style console\nPlatform: ${models[d.type].title}\nHostname: ${d.name}\nEthernet ports: ${models[d.type].ports.length}`);
-  if (c==='show clock') return reply(new Date().toLocaleTimeString());
   if (c==='show history') return reply((s.history??[]).join('\n'));
   if (/^show (cdp|lldp)(?: |$)/.test(c)) {
     const protocol=args[1];
@@ -77,7 +79,7 @@ export function diagnostic(lab,d,s,args,c) {
       (address==='arp'||ip===address)&&deviceById(lab,entry.device)&&linkUp(lab,d,entry.port)).map(([ip,e])=>`${ip.padEnd(17)}${e.mac.padEnd(16)}${e.port}`),'No ARP entries. Try ping first.');
   }
   if (c.startsWith('show mac address-table')) {
-    const entries=Object.values(d.macTable??{}).filter(e=>linkUp(lab,d,e.port)&&Object.hasOwn(d.vlans,e.vlan));
+    const entries=Object.values(d.macTable??{}).filter(e=>linkUp(lab,d,e.port)&&Object.hasOwn(vlanDatabase(lab,d).vlans,e.vlan));
     if (args[3]==='count') return reply('Dynamic addresses: '+entries.length);
     const filter=args[4], value=args[5];
     const displayed=args[3]==='static'||args[3]==='secure'?Object.entries(d.ports).flatMap(([port,p])=>[...(p.security?.static??[]),...(args[3]==='secure'?p.security?.learned??[]:[])].map(mac=>({mac,port,vlan:p.vlan,type:args[3].toUpperCase()}))):entries.filter(e=>!filter||(filter==='vlan'?e.vlan===Number(value):filter==='interface'?e.port===interfaceName([value]):e.mac===value.toLowerCase()));
@@ -93,7 +95,10 @@ export function diagnostic(lab,d,s,args,c) {
     return rows('',entries.map(([port,p])=>{
       const state=linkUp(lab,d,port)?'up':p.up?'down':'administratively down';
       if (view==='description') return [port,state,p.description??''].join('  ');
-      if (view==='switchport'||view==='trunk') return `${port}  ${p.mode??'routed'}  Access VLAN: ${p.vlan??'—'}  Native VLAN: ${p.native??'—'}  Voice VLAN: ${p.voice??'—'}  Allowed: ${p.allowed?.join(',')??'all'}`;
+      if(view==='switchport'||view==='trunk'){
+        const active=d.type==='switch'?operationalPort(lab,d,port):p;
+        return `${port}  Administrative Mode: ${p.mode??'routed'}${p.mode==='dynamic'?' '+p.dtp:''}  Operational Mode: ${active.mode??'routed'}  Access VLAN: ${active.vlan??'—'}  Native VLAN: ${active.native??'—'}  Voice VLAN: ${active.voice??'—'}  Allowed: ${active.allowed?.join(',')??'all'}`;
+      }
       if (view==='status') return `${port}  ${state}  ${p.mode==='trunk'?'trunk':p.vlan??'routed'}`;
       return `${port} is ${state}, line protocol is ${linkUp(lab,d,port)?'up':'down'}\n  Description: ${p.description??'—'}\n  IPv4: ${p.address?p.address+'/'+p.prefix:'unassigned'}\n  Duplex: ${p.duplex??'auto'}  Speed: ${p.speed??'auto'}\n  Inbound ACL: ${p.acl?.in??'—'}  Outbound ACL: ${p.acl?.out??'—'}`;
     }));
@@ -147,11 +152,11 @@ export function diagnostic(lab,d,s,args,c) {
       `${port} [${linkUp(lab,d,port)?'up/up':'down/down'}]\n  ${interfacesV6(d,port).map(a=>a.address+'/'+a.prefix).join('\n  ')||'unassigned'}`));
   }
   if (c.startsWith('show ipv6 route')) {
-    const all=routesV6(lab,d);
-    const locals=all.filter(r=>r.distance===0).map(r=>({...r,destination:r.address,prefix:128,local:true}));
-    const filter=args[3];
-    return rows('',[...all,...locals].filter(r=>!filter||(r.local?'local':r.distance===0?'connected':'static')===filter)
-      .map(r=>`${r.local?'L':r.distance===0?'C':'S'}  ${r.destination}/${r.prefix} [${r.distance}/0] via ${r.next??'direct'}, ${r.port}`),'No IPv6 routes.');
+    const vrf=args[3]==='vrf'?args[4]:undefined;
+    const all=routesV6(lab,d,vrf),filter=vrf?args[5]:args[3];
+    const locals=all.filter(r=>r.protocol==='connected').map(r=>({...r,destination:r.address,prefix:128,protocol:'local'}));
+    return rows('',[...all,...locals].filter(r=>!filter||r.protocol===filter||r.destination+'/'+r.prefix===filter)
+      .map(r=>`${{connected:'C',local:'L',static:'S',ospf:'O'+(r.ospfType?' '+r.ospfType:''),bgp:'B',eigrp:'D'}[r.protocol]}  ${r.destination}/${r.prefix} [${r.distance}/${r.metric??0}] via ${r.next??'direct'}, ${r.port}`),'No IPv6 routes.');
   }
   if (c==='show ipv6 neighbors') return rows('IPv6 Address   State   Interface',neighborRowsV6(lab,d));
   return null;
@@ -276,16 +281,20 @@ export function configureV6(d, port, args, c) {
     return reply();
   }
   if (c.includes('ipv6 route ')) {
-    const [network, via, distanceText]=args.slice(no?3:2);
-    const net=parsePrefixV6(network);
-    const ip=parseV6(via);
-    const targetPort=interfaceName([via]);
-    const distance=Number(distanceText??1);
-    if (!net||networkV6(net.address,net.prefix)!==net.address||(ip===null&&!d.ports[targetPort])||!integer(String(distance),1,254)) return invalid('Use ipv6 route PREFIX/LENGTH NEXT-HOP [DISTANCE].');
+    const words=args.slice(no?3:2);
+    const vrf=words[0]==='vrf'?words[1]:undefined;
+    if(vrf&&!Object.hasOwn(d.vrfs??{},vrf))return invalid('This VRF does not exist.');
+    const [network,via,extra,weight]=vrf?words.slice(2):words;
+    const net=parsePrefixV6(network),targetPort=interfaceName([via]),routePort=d.ports[targetPort]?targetPort:undefined;
+    const nextWord=routePort?extra&&parseV6(extra)!==null?extra:undefined:via;
+    const ip=nextWord?parseV6(nextWord):null;
+    const preference=routePort&&ip!==null?weight:extra;
+    const distance=Number(preference??1);
+    if(!net||networkV6(net.address,net.prefix)!==net.address||ip===null&&!routePort||routePort&&d.ports[routePort].vrf!==vrf||
+      !integer(String(distance),1,254)||ip!==null&&/^fe[89ab]/.test(formatV6(ip))&&!routePort)return invalid('Use ipv6 route PREFIX/LENGTH [INTERFACE] NEXT-HOP [DISTANCE]. Link-local next hops require an interface.');
     const next=ip===null?undefined:formatV6(ip);
-    const routePort=ip===null?targetPort:undefined;
-    d.ipv6Routes=(d.ipv6Routes??[]).filter(r=>!(r.destination===net.address&&r.prefix===net.prefix&&r.next===next&&r.port===routePort));
-    if (!no) d.ipv6Routes.push({destination:net.address,prefix:net.prefix,next,port:routePort,distance});
+    d.ipv6Routes=(d.ipv6Routes??[]).filter(r=>r.vrf!==vrf||r.destination!==net.address||r.prefix!==net.prefix||r.next!==next||r.port!==routePort);
+    if(!no)d.ipv6Routes.push({destination:net.address,prefix:net.prefix,next,port:routePort,distance,vrf});
     return reply();
   }
   return null;

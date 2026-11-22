@@ -180,3 +180,23 @@ html:has(.sim-workspace) { scroll-behavior: auto; }
 .sim-core .sim-scenario { grid-row: 3; }
 .sim-scenario button { border: 0; padding: 1px 0; background: transparent; color: var(--sim-accent); font: inherit; text-align: left; text-decoration: underline; text-underline-offset: .16em; cursor: pointer; }
 .sim-scenario button:hover { color: #e7ffb7; }
+
+.ios-command-index { margin-block-start: 1.5rem; scroll-margin-top: 6rem; }
+.ios-command-index > summary { padding: 1rem; color: var(--sim-accent); font-size: 1rem; }
+.ios-command-body { padding: 0 1rem 1rem; }
+.ios-command-body > p { color: var(--sim-muted); max-width: 80ch; }
+.ios-command-filters { display: grid; grid-template-columns: minmax(12rem,2fr) repeat(2,minmax(8rem,1fr)); gap: .8rem; }
+.ios-command-filters label { display: grid; gap: .45rem; font-size: .875rem; }
+.ios-command-filters input, .ios-command-filters select { min-height: 2.5rem; width: 100%; }
+#ios-command-results { list-style: none; margin: 0; padding: 0; display: grid; gap: .75rem; }
+.ios-command-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 1rem; border-top: 1px solid var(--sim-line); padding: .85rem 0 .25rem; align-items: start; }
+.ios-command-info code { display: block; overflow-wrap: anywhere; color: var(--sim-accent); font-size: .875rem; }
+.ios-command-info p { margin: .35rem 0; font-size: .875rem; color: var(--sim-muted); }
+.ios-command-info .ios-command-explanation { color: var(--sim-ink); }
+.ios-command-actions { display: flex; flex-wrap: wrap; gap: .45rem; }
+#ios-command-more { margin-top: 1rem; }
+@media (max-width: 640px) {
+  .ios-command-filters, .ios-command-row { grid-template-columns: 1fr; }
+  .ios-command-actions { justify-content: flex-start; }
+}
+#sim-vpn-lab { min-height: 2rem; max-width: 100%; }

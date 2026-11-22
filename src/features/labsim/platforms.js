@@ -2,7 +2,7 @@ export const deviceLimit = 10;
 const gigabit = (count, offset = 0) => Array.from({length:count}, (_, index) => 'Gi0/'+(index+offset));
 export const models = {
   router: { title:'Router', platform:'IOS XE-style enterprise edge', prefix:'R', ports:gigabit(4), icon:'router', ios:true },
-  switch: { title:'Switch', platform:'Catalyst-style multilayer switch', prefix:'SW', ports:gigabit(8,1), icon:'switch', ios:true },
+  switch: { title:'Switch', platform:'Catalyst-style multilayer switch', prefix:'SW', ports:gigabit(24,1), icon:'switch', ios:true },
   pc: { title:'PC', platform:'Dual-stack workstation', prefix:'PC', ports:['Eth0'], icon:'pc' },
   phone: { title:'IP phone', platform:'Cisco-style voice endpoint', prefix:'TEL', ports:['Eth0'], icon:'phone' },
   ap: { title:'Wi-Fi AP', platform:'Standalone or controller-managed AP', prefix:'AP', ports:['Eth0'], icon:'ap' },

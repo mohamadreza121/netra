@@ -1,4 +1,5 @@
 import { deviceById, linkUp } from './network.js';
+import { interfaceName } from './ios.js';
 
 export function layer2Config(device,port,args,parseVlans) {
   const no=args[0]==='no', words=no?args.slice(1):args;
@@ -59,6 +60,11 @@ export function layer2Show(lab,device,args) {
     }).join('\n')||'No DHCP snooping bindings.';
   }
   if(args[4]==='statistics')return 'Dropped '+(dhcp?'DHCP offers: '+(cfg?.dhcpDropped??0):'ARP checks: '+(cfg?.arpDropped??0));
+  if(args[4]==='interfaces'){
+    const name=args.length>5?interfaceName(args.slice(5)):null;
+    const ports=Object.entries(device.ports).filter(([key])=>args.length===5||key===name);
+    return ports.length?['Interface   Trust   Link',...ports.map(([key,p])=>key+'  '+(p.arpTrust?'Trusted':'Untrusted')+'  '+(linkUp(lab,device,key)?'up':'down'))].join('\n'):'% This interface is not present.';
+  }
   const field=dhcp?'dhcpTrust':'arpTrust';
   const trusted=Object.entries(device.ports).filter(([,p])=>p[field]).map(([port])=>port).join(', ')||'none';
   return dhcp

@@ -1,3 +1,10 @@
+import { ipsecIOS } from './ipsec.js';
+import { deviceFilesIOS } from './device-files.js';
+import { packetPolicyIOS } from './packet-policy.js';
+import { mplsIOS } from './mpls.js';
+import { qosIOS } from './qos.js';
+import { ospfv3IOS } from './ospfv3.js';
+import { campusIOS } from './campus.js';
 import { client6Commands, ipv6ServiceIOS, raGuardIOS, server6Commands } from './ipv6-services.js';
 import { netflowIOS } from './netflow.js';
 import { greIOS } from './gre.js';
@@ -15,7 +22,9 @@ const operational = [
   'show interfaces [<interface...>]', 'show interfaces status', 'show interfaces description',
   'show ip interface brief', 'show ip interface [<interface...>]', 'show ip arp [<address>]', 'show arp [<address>]',
   'show version', 'show clock', 'show history', 'show cdp', 'show cdp neighbors [detail]',
-  'show lldp', 'show lldp neighbors [detail]', 'ping <address>', 'traceroute <address>'
+  'show lldp', 'show lldp neighbors [detail]', 'ping <address>','ping <address> repeat <count> [size <bytes>] [tos <tos>]',
+  'ping <address> size <bytes> [repeat <count>] [tos <tos>]','ping <address> tos <tos>', 'traceroute <address> [numeric]',
+  'traceroute <address> source <address-or-interface...>'
 ];
 const privileged = [
   ...operational, 'configure terminal', 'disable', 'show running-config', 'show running-config interface <interface...>', 'show startup-config',
@@ -34,7 +43,7 @@ const deviceExec = {
     'show interfaces <interface> switchport','show interfaces <interface> status','show interfaces <interface> trunk',
     'show interfaces vlan <vlan>','show spanning-tree','show spanning-tree summary','show spanning-tree vlan <vlan> [root]','show spanning-tree root',
     'show etherchannel summary','show etherchannel <group> summary','show port-security','show port-security interface <interface...>',
-    'show ip dhcp snooping','show ip dhcp snooping statistics','show ip dhcp snooping binding','show ip arp inspection','show ip arp inspection statistics','show mac address-table','show mac address-table count','show mac address-table dynamic',
+    'show ip dhcp snooping','show ip dhcp snooping statistics','show ip dhcp snooping binding','show ip arp inspection','show ip arp inspection statistics','show ip arp inspection interfaces [<interface...>]','show mac address-table','show mac address-table count','show mac address-table dynamic',
     'show mac address-table dynamic vlan <vlan>','show mac address-table dynamic interface <interface>','show mac address-table dynamic address <mac>',
     'show mac address-table static','show mac address-table secure','clear mac address-table dynamic']
 };
@@ -48,7 +57,8 @@ const deviceGlobal = {
     'service dhcp','no service dhcp','router ospf <process>','no router ospf <process>',
     'ip access-list standard <name>','ip access-list extended <name>','no ip access-list standard <name>','no ip access-list extended <name>',
     'access-list <number> <rule...>','no access-list <number>','ipv6 unicast-routing','no ipv6 unicast-routing',
-    'ipv6 route <prefix> <next-hop> [<distance>]','no ipv6 route <prefix> <next-hop> [<distance>]',
+    ...['ipv6 route','no ipv6 route'].flatMap(c=>[c+' <prefix> <next-hop> [<distance>]',c+' <prefix> <port> <next-hop> <distance>',
+      c+' vrf <name> <prefix> <next-hop> [<distance>]',c+' vrf <name> <prefix> <port> <next-hop> <distance>']),
     'ip nat inside source static <local> <global>','no ip nat inside source static <local> <global>',
     'ip nat pool <name> <first> <last> netmask <mask>','ip nat pool <name> <first> <last> prefix-length <length>','no ip nat pool <name>',
     'ip nat inside source list <list> pool <name> [overload]','no ip nat inside source list <list> pool <name> [overload]',
@@ -105,11 +115,11 @@ const ospfMode = [
 ];
 
 function iosPatterns(type) {
-  const extensions=type==='wlc'?[wirelessIOS]:[bgpIOS,eigrpIOS,policyIOS,vrfIOS,availabilityIOS,netflowIOS,ipv6ServiceIOS,...(type==='router'?[greIOS]:[raGuardIOS])];
+  const extensions=[deviceFilesIOS,...(type==='wlc'?[wirelessIOS]:[bgpIOS,eigrpIOS,policyIOS,vrfIOS,availabilityIOS,ospfv3IOS,mplsIOS,packetPolicyIOS,qosIOS,netflowIOS,ipv6ServiceIOS,...(type==='router'?[greIOS,ipsecIOS]:[raGuardIOS,campusIOS])])];
   const ext=(mode)=>extensions.flatMap(x=>x[mode]??[]);
   const ops=[...serviceIOS.operational,...identityIOS.operational,...ext('operational'),
     ...(type==='switch'?[...identityIOS.switchOperational,...deviceExec.router.filter(c=>/^show (ip ospf|ip protocols|ip route ospf|ip route local|ip access-lists|access-lists|ipv6)/.test(c))]:[])];
-  const exec=[...privileged,...deviceExec[type],...ops,...serviceIOS.exec,...identityIOS.exec];
+  const exec=[...privileged,...deviceExec[type],...ops,...serviceIOS.exec,...identityIOS.exec,...ext('exec')];
   const config=['exit','end',...exec.filter(c=>/^(show|ping|traceroute) /.test(c)).map(c=>'do '+c)];
   const layer3Switch=type==='switch'?devicePort.router.filter(c=>/^(?:no )?(?:ip ospf|ip helper-address|ip access-group|ipv6|bandwidth)/.test(c)):[];
   const privGlobal=type==='switch'?deviceGlobal.router.filter(c=>/^(?:no )?(?:router ospf|ip access-list|access-list|ipv6)/.test(c)):[];
@@ -123,7 +133,7 @@ function iosPatterns(type) {
   };
   if(type==='router')modes.pool=['network <network> <mask>','default-router <address>','dns-server <address>','domain-name <domain>','option 150 ip <address>','lease <days> [<hours>] [<minutes>]'];
   if(type==='switch'){
-    modes.range=[...port,...devicePort.switch.filter(c=>!c.startsWith('ip address')&&c!=='no ip address'),...identityIOS.interface];
+    modes.range=[...port,...devicePort.switch.filter(c=>!c.startsWith('ip address')&&c!=='no ip address'),...identityIOS.interface,...campusIOS.interface];
     modes.vlan=['name <name...>','shutdown','no shutdown'];
   }
   if(type!=='wlc'){
@@ -131,7 +141,7 @@ function iosPatterns(type) {
     modes.acl=['permit <rule...>','deny <rule...>','remark <text...>','<sequence> <rule...>','no <sequence>'];
   }
   for(const extension of extensions)for(const [name,patterns] of Object.entries(extension)){
-    if(!['operational','global','interface'].includes(name))modes[name]=patterns;
+    if(!['operational','global','interface','exec'].includes(name))modes[name]=patterns;
   }
   for(const key of Object.keys(modes))if(!['user','exec','global','interface'].includes(key))modes[key]=[...config,...modes[key]];
   return modes;

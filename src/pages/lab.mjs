@@ -8,7 +8,7 @@ export function lab() {
 <section class="sim-workspace frame" aria-label="Network simulator">
   <div class="sim-tools">
     <div id="sim-add" class="sim-add" aria-label="Add devices"></div>
-    <div class="sim-actions"><button type="button" id="sim-enterprise" class="sim-button sim-accent">Load Enterprise Campus</button><button type="button" id="sim-routing" class="sim-button">Load Routing Core</button><a class="sim-button" href="/labsim/ccnp/">CCNP guided labs</a><button type="button" id="sim-export" class="sim-button">Export JSON</button><button type="button" id="sim-import" class="sim-button">Import JSON</button><input id="sim-import-file" type="file" accept=".json,application/json" hidden><button type="button" id="sim-starter" class="sim-button">Load Branch LAN</button><button type="button" id="sim-empty" class="sim-button">New empty lab</button></div>
+    <div class="sim-actions"><button type="button" id="sim-enterprise" class="sim-button sim-accent">Load Enterprise Campus</button><button type="button" id="sim-routing" class="sim-button">Load Routing Core</button><select id="sim-vpn-lab" aria-label="Load a VPN topology"><option value="">Load a VPN topology</option><option value="provider-vpn">Provider VPN · MPLS</option><option value="dmvpn">DMVPN Phase 3</option></select><a class="sim-button" href="#ios-commands" id="ios-command-link">Command index</a><a class="sim-button" href="/labsim/ccnp/">CCNP guided labs</a><button type="button" id="sim-export" class="sim-button">Export JSON</button><button type="button" id="sim-import" class="sim-button">Import JSON</button><input id="sim-import-file" type="file" accept=".json,application/json" hidden><button type="button" id="sim-starter" class="sim-button">Load Branch LAN</button><button type="button" id="sim-empty" class="sim-button">New empty lab</button></div>
   </div>
   <p id="sim-status" role="status" class="sim-status"></p>
   <div class="sim-grid">
@@ -39,6 +39,22 @@ export function lab() {
         </ol>
         <p>Choose a command to load it into the console, then press Enter.</p>
       </details>
+      <details class="sim-panel sim-help sim-scenario" data-lab-scenario="provider-vpn" hidden open>
+        <summary>Trace a tenant route through the provider core</summary>
+        <ol>
+          <li>On <b>R1</b>, <button type="button" data-device="R1" data-lab-command="show mpls ldp neighbor">check LDP</button>, then <button type="button" data-device="R1" data-lab-command="show bgp vpnv4 unicast all 198.18.0.0/24">inspect the route target and VPN label</button>.</li>
+          <li>On <b>PC1</b>, <button type="button" data-device="PC1" data-lab-command="ping 198.18.0.2">ping PC2 across the VPN</button>. The path crosses both provider edges and the core.</li>
+          <li>On <b>R2</b>, apply <code>no mpls ip</code> to <code>Gi0/1</code>. Retry the ping and <button type="button" data-device="R1" data-lab-command="show ip route vrf LAB-WEST">check which route disappeared</button>. Use <code>mpls ip</code> to restore label forwarding.</li>
+        </ol>
+      </details>
+      <details class="sim-panel sim-help sim-scenario" data-lab-scenario="dmvpn" hidden open>
+        <summary>Watch the DMVPN spokes learn a shorter path</summary>
+        <ol>
+          <li>On <b>R1</b>, <button type="button" data-device="R1" data-lab-command="show dmvpn">check spoke registrations</button> and <button type="button" data-device="R1" data-lab-command="show crypto ikev2 sa">verify IKEv2 settings</button>.</li>
+          <li>On <b>PC1</b>, <button type="button" data-device="PC1" data-lab-command="ping 10.79.3.2">ping PC2 twice</button>. Compare the first path through the hub with the next path directly between spokes.</li>
+          <li>On <b>R2</b>, <button type="button" data-device="R2" data-lab-command="show ip nhrp shortcut">inspect the shortcut</button> and <button type="button" data-device="R2" data-lab-command="show crypto ipsec sa">read the IPsec counters</button>. These counters model negotiated protection and forwarded packets.</li>
+        </ol>
+      </details>
       <section class="sim-panel sim-console" aria-label="Device console">
         <div class="sim-bar"><h2 id="sim-console-title">Device console</h2><button class="sim-button" type="button" id="sim-clear">Clear</button></div>
         <pre id="sim-output" role="log" tabindex="0" aria-label="Command output"></pre>
@@ -68,6 +84,20 @@ export function lab() {
       </ol><p>The starter network uses lab credentials. Open Commands for this device to see the syntax available in the live console.</p></details>
     </aside>
   </div>
+  <details id="ios-commands" class="sim-panel ios-command-index">
+    <summary>CCNA and CCNP command index</summary>
+    <div class="ios-command-body">
+      <p>Open any course example with its setup loaded. Commands checked in LabSim can also be sent to a device console. Match the CLI mode and topology shown in the example before running.</p>
+      <div class="ios-command-filters">
+        <label>Search commands<input id="ios-command-query" type="search" placeholder="e.g. show bgp ipv6, VTP, MPLS"></label>
+        <label>Track<select id="ios-command-track"><option value="">All tracks</option><option value="ccna">CCNA</option><option value="encor">ENCOR</option><option value="enarsi">ENARSI</option></select></label>
+        <label>Availability<select id="ios-command-availability"><option value="">All examples</option><option value="live">Checked in LabSim</option><option value="guided">Guided setup</option></select></label>
+      </div>
+      <p id="ios-command-count" role="status"></p>
+      <ul id="ios-command-results"></ul>
+      <button id="ios-command-more" type="button" class="sim-button" hidden>Show more commands</button>
+    </div>
+  </details>
   <dialog id="sim-confirm"><form method="dialog"><h2 id="sim-confirm-title">Replace this workspace?</h2><p id="sim-confirm-copy"></p><div><button class="sim-button" value="cancel" autofocus>Cancel</button><button class="sim-button sim-accent" value="confirm">Continue</button></div></form></dialog>
 </section>`;
 }

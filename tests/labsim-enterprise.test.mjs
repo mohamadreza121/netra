@@ -30,6 +30,7 @@ test('controller WLAN uses CAPWAP, ISE and the live campus DHCP relay',()=>{
   const ap=consoleFor(lab,'AP1'), ise=consoleFor(lab,'ISE1');
   assert.match(ap.run('show capwap client rcb').text,/RUN · WLC1/);
   assert.match(wlc.run('sh ap sum').text,/AP1.*RUN/);
+  assert.match(wlc.run('show ap tag summary').text,/AP1.*CAMPUS/);
   assert.match(pc.run('wifi scan').text,/Netra-Enterprise.*WPA2-Enterprise/);
   assert.match(pc.run('wifi join Netra-Enterprise enterprise denied NetraStudent').text,/denied access/);
   assert.match(ise.run('show radius live-logs').text,/REJECT.*denied/);
@@ -40,6 +41,11 @@ test('controller WLAN uses CAPWAP, ISE and the live campus DHCP relay',()=>{
   assert.match(pc.run('curl http://campus.netra.test/status').text,/Netra campus services are online/);
   assert.match(wlc.run('show wireless client summary').text,/Netra-Enterprise.*VLAN 110/);
   assert.match(pc.run('ping provider.netra.test').text,/PC1 → AP1 → WLC1 → SW1 → R1 → R2/);
+
+  wlc.config('wlan Staff 10 Netra-Enterprise','no security wpa wpa2 ciphers aes');
+  assert.match(pc.run('wifi status').text,/Not associated/);
+  wlc.config('wlan Staff 10 Netra-Enterprise','security wpa wpa2 ciphers aes');
+  assert.match(pc.run('wifi status').text,/Associated.*Netra-Enterprise/);
 
   access.config('interface gi0/2','switchport trunk allowed vlan remove 110');
   assert.match(ap.run('show capwap client rcb').text,/RUN/);
@@ -68,7 +74,7 @@ test('wired 802.1X, SSH authentication, NTP, syslog and SIP depend on service st
   assert.match(pc.run('ssh -l netadmin 10.72.110.1').text,/Password required/);
   assert.equal(pc.prompt(),'Password:');
   assert.match(pc.run('wrong').text,/Permission denied/);
-  pc.run('ssh -l netadmin 10.72.110.1');
+  pc.run('ssh netadmin@10.72.110.1');
   assert.match(pc.run('NetraAdmin').text,/Connected to R1/);
   assert.equal(pc.prompt(),'R1>');
   assert.match(pc.run('sh ip int br').text,/10\.72\.110\.1/);

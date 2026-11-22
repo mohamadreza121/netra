@@ -4,6 +4,7 @@ import { rackHero } from '../src/pages/rack-hero.mjs';
 import { ccnaPractice } from '../src/pages/ccna.mjs';
 import { ccnpPractice } from '../src/pages/ccnp.mjs';
 import { lab } from '../src/pages/lab.mjs';
+import { buildCommandIndex } from '../src/features/labsim/command-index.js';
 import { layout } from '../src/layout.mjs';
 
 const output = new URL('../dist/', import.meta.url);
@@ -12,6 +13,7 @@ await mkdir(output);
 for (const folder of ['styles', 'assets', 'features/labsim', 'features/ccna', 'features/ccnp', 'features/practice']) {
   await cp(new URL('../src/' + folder, import.meta.url), new URL(folder, output), { recursive: true });
 }
+await writeFile(new URL('features/labsim/course-commands.json',output),JSON.stringify(buildCommandIndex()));
 await cp(new URL('../src/motion.js', import.meta.url), new URL('motion.js', output));
 const routes = [
   ['','Home',home(),rackHero()],

@@ -21,7 +21,7 @@ const processCommands=[
 const authentication=[
   'ip authentication mode eigrp <asn> md5','no ip authentication mode eigrp <asn> md5',
   'ip authentication key-chain eigrp <asn> <name>','no ip authentication key-chain eigrp <asn> <name>',
-  'ip hello-interval eigrp <asn> <seconds>','ip hold-time eigrp <asn> <seconds>'
+  'ip hello-interval eigrp <asn> <seconds>','ip hold-time eigrp <asn> <seconds>','ip split-horizon eigrp <asn>','no ip split-horizon eigrp <asn>'
 ];
 export const eigrpIOS={
   operational:['show ip eigrp neighbors [detail]','show ip eigrp interfaces [detail]',
@@ -35,7 +35,7 @@ export const eigrpIOS={
     'authentication mode md5','no authentication mode md5','authentication key-chain <name>','no authentication key-chain <name>','exit-af-interface'],
   eigrpTopology:[...topology,'exit-af-topology'],
   keyChain:['key <number>','no key <number>'],
-  keyChainKey:['key-string <value>','no key-string']
+  keyChainKey:['key-string <value>','no key-string','cryptographic-algorithm hmac-sha-256','cryptographic-algorithm md5']
 };
 
 const classful=address=>Number(address.split('.')[0])<128?8:Number(address.split('.')[0])<192?16:24;
@@ -47,6 +47,10 @@ export function eigrpPort(d,p,args) {
   if(w[0]==='delay'){
     if(!integer(w[1],1,16777215))return invalid('Use delay in tens of microseconds.');
     p.delay=Number(w[1]);return reply();
+  }
+  if(w[0]==='ip'&&w[1]==='split-horizon'){
+    if(!integer(w[3],1,65535))return invalid('Use a valid EIGRP ASN.');
+    (p.eigrpSplit??={})[w[3]]=!no;return reply();
   }
   if(w[0]!=='ip'||!['authentication','hello-interval','hold-time'].includes(w[1]))return null;
   const authentication=w[1]==='authentication', raw=authentication?w[4]:w[3];
@@ -82,7 +86,8 @@ export function eigrpConfig(d,s,args,c) {
   if(s.mode==='keyChainKey'){
     const key=own(d.keyChains,s.current.name)?.[s.current.id];
     if(!key)return invalid('This key no longer exists.');
-    if(no)delete key.value;else key.value=sub;
+    if(verb==='cryptographic-algorithm')key.algorithm=sub;
+    else if(no)delete key.value;else key.value=sub;
     return reply();
   }
   if(s.mode==='global'&&verb==='router'&&sub==='eigrp'){
@@ -211,8 +216,10 @@ function bestPaths(lab,d,ports) {
     if(paths.get(node.device.id)!==node||node.device!==d&&node.device.eigrp.stub)continue;
     for(const {local,remote,device} of peers(lab,node.device,ports)){
       if(device===d||node.history?.includes(device.id))continue;
+      const outgoing=node.device.ports[local.port];
+      if(node.ingress===local.port&&outgoing.gre?.mode==='gre multipoint'&&outgoing.eigrpSplit?.[node.device.eigrp.asn]!==false)continue;
       const candidate={device,bandwidth:Math.min(node.bandwidth,local.bandwidth),
-        delay:node.delay+local.delay,port:node.port??local.port,next:node.next??remote.address,history:[...(node.history??[d.id]),device.id]};
+        delay:node.delay+local.delay,ingress:remote.port,port:node.port??local.port,next:node.next??remote.address,history:[...(node.history??[d.id]),device.id]};
       candidate.distance=metric(d,candidate);
       if((paths.get(device.id)?.distance??Infinity)<=candidate.distance)continue;
       paths.set(device.id,candidate);queue.push(candidate);
@@ -275,7 +282,7 @@ export function eigrpShow(lab,d,args,underlay) {
 
 export function eigrpRunning(d) {
   const lines=Object.entries(d.keyChains??{}).flatMap(([name,keys])=>['key chain '+name,...Object.entries(keys).flatMap(([id,key])=>[
-    ' key '+id,...(key.value?['  key-string [configured]']:[])
+    ' key '+id,...(key.value?['  key-string [configured]']:[]),...(key.algorithm?['  cryptographic-algorithm '+key.algorithm]:[])
   ])]);
   const e=d.eigrp;
   if(!e)return lines;
