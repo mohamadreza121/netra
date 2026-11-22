@@ -81,26 +81,20 @@ html:has(.sim-workspace) { scroll-behavior: auto; }
 .sim-node:active { cursor: grabbing; }
 .sim-node:hover, .sim-node[aria-pressed="true"] { background: #203c34; border-color: #689d87; z-index: 1; }
 .sim-node b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 .7rem var(--mono, monospace); text-shadow: 0 1px 4px #071812; }
-.sim-node-icon {
-  position: relative;
+.sim-node-icon, .sim-palette-icon {
   display: block;
-  width: 40px;
-  height: 24px;
-  border: 1px solid #6f9c8b;
-  border-radius: 2px;
-  box-shadow: 0 2px 0 #071813, inset 0 1px 0 #a8efce42;
-  background: linear-gradient(#3d6257, #17352c);
+  object-fit: contain;
+  background: #e1ede8;
+  border: 1px solid #a7c8ba;
+  border-radius: 4px;
+  pointer-events: none;
 }
-.sim-node-icon::before { position: absolute; content: ""; }
-.sim-node-icon[data-icon="router"] { border-radius: 9px / 5px; border-color: #91c6af; }
-.sim-node-icon[data-icon="router"]::before { inset: 7px 12px; border-block: 2px solid #b1ead4; transform: skewX(-18deg); }
-.sim-node-icon[data-icon="switch"]::before { inset: 9px 4px 6px; background: repeating-linear-gradient(90deg, #a0da9a 0 3px, #132921 3px 5px); }
-.sim-node-icon[data-icon="pc"] { width: 29px; height: 21px; border-width: 2px; background: linear-gradient(130deg, #25443d, #6cb39c); margin-bottom: 3px; }
-.sim-node-icon[data-icon="pc"]::before { bottom: -5px; width: 15px; left: 5px; border-bottom: 2px solid #86baab; }
-.sim-node-icon[data-icon="phone"] { width: 25px; height: 25px; border-color: #aa9467; background: #524334; }
-.sim-node-icon[data-icon="phone"]::before { inset: 5px 4px 4px 8px; background: repeating-linear-gradient(#bdac7f 0 2px, #382e24 2px 4px); border-left: 3px solid #d4bc89; }
-.sim-node-icon[data-icon="ap"] { width: 25px; height: 25px; border-radius: 50%; border-color: #809dc9; background: #2f4667; }
-.sim-node-icon[data-icon="ap"]::before { inset: 5px; border: 2px solid transparent; border-top-color: #c4ddff; border-radius: 50%; }
+.sim-node-icon {
+  width: 44px;
+  height: 33px;
+  padding: 2px;
+  box-shadow: 0 2px 3px #071813;
+}
 .sim-legend { display: flex; flex-wrap: wrap; padding: 9px 12px; gap: 6px 17px; border-top: 1px solid var(--sim-line); color: var(--sim-muted); font-size: .73rem; }
 .sim-legend i { display: inline-block; width: 13px; margin-right: 4px; vertical-align: middle; border-top: 2px solid #7ce5b6; }
 .sim-legend span:nth-child(2) i { border-top: 2px dashed #788983; }
@@ -162,19 +156,7 @@ html:has(.sim-workspace) { scroll-behavior: auto; }
 .sim-ref-command { display: block; padding-block: 3px; }
 .sim-add .sim-button { display: inline-flex; align-items: center; gap: 6px; }
 .sim-add .sim-button small { margin-left: 1px; }
-.sim-palette-icon { width: 7px; height: 7px; border: 1px solid currentColor; border-radius: 1px; color: #a8efce; }
-.sim-add [data-type="wlc"] .sim-palette-icon { color: #b7a8f0; }
-.sim-add [data-type="ise"] .sim-palette-icon { color: #dfa9cf; }
-.sim-add [data-type="server"] .sim-palette-icon { color: #95dcd9; }
-.sim-add [data-type="ap"] .sim-palette-icon { color: #9abef0; border-radius: 50%; }
-.sim-add [data-type="phone"] .sim-palette-icon { color: #e0c489; }
-.sim-node-icon[data-icon="wlc"] { border-color: #9e89cc; background: linear-gradient(#544773, #262544); }
-.sim-node-icon[data-icon="wlc"]::before { inset: 5px 10px; border: 2px solid transparent; border-top-color: #dbceff; border-radius: 50%; }
-.sim-node-icon[data-icon="wlc"]::after { position: absolute; inset: 10px 16px 3px; content: ""; border-top: 2px solid #dbceff; border-radius: 50%; }
-.sim-node-icon[data-icon="ise"] { width: 26px; border-color: #bb86ad; background: linear-gradient(#6a4962, #382840); border-radius: 5px 5px 9px 9px; }
-.sim-node-icon[data-icon="ise"]::before { inset: 6px 7px; border-bottom: 2px solid #ffd6f2; border-left: 2px solid #ffd6f2; transform: rotate(-45deg); }
-.sim-node-icon[data-icon="server"] { width: 26px; height: 29px; border-color: #75b0ad; background: linear-gradient(#356263, #183736); }
-.sim-node-icon[data-icon="server"]::before { inset: 4px; background: repeating-linear-gradient(#96dcd6 0 2px, transparent 2px 6px); }
+.sim-palette-icon { width: 22px; height: 19px; padding: 1px; flex: none; }
 .sim-legend span:nth-child(5) i { border-top: 2px dotted #cbb1ee; }
 .sim-scenario[open] { border-left: 2px solid #84c8ac; }
 .sim-core .sim-scenario { grid-row: 3; }

@@ -94,6 +94,14 @@ function place(node,d) {
   node.style.left=d.x+'%';
   node.style.top=d.y+'%';
 }
+function deviceIcon(model,className) {
+  const icon=element('img',undefined,className);
+  icon.src='/assets/labsim/'+model.icon+'.svg';
+  icon.alt='';
+  icon.draggable=false;
+  return icon;
+}
+
 function renderBoard() {
   $('sim-board-empty').hidden=lab.devices.length!==0;
   $('sim-nodes').replaceChildren(...lab.devices.map(d=>{
@@ -103,10 +111,7 @@ function renderBoard() {
     },'sim-node');
     node.dataset.id=d.id;node.dataset.type=d.type;
     node.setAttribute('aria-label',d.name+' '+models[d.type].title);
-    const icon=element('span',undefined,'sim-node-icon');
-    icon.dataset.icon=models[d.type].icon;
-    icon.setAttribute('aria-hidden','true');
-    node.append(icon,element('b',d.name));
+    node.append(deviceIcon(models[d.type],'sim-node-icon'),element('b',d.name));
     place(node,d);
     node.addEventListener('pointerdown',event=>{
       if(event.button!==0)return;
@@ -343,9 +348,7 @@ for(const [type,model] of Object.entries(models)){
   });
   control.dataset.type=type;
   control.title=model.platform;
-  const icon=element('i',undefined,'sim-palette-icon');
-  icon.setAttribute('aria-hidden','true');
-  control.prepend(icon);
+  control.prepend(deviceIcon(model,'sim-palette-icon'));
   control.append(element('small'));
   $('sim-add').append(control);
 }
