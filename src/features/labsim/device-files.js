@@ -1,5 +1,5 @@
 import { addDevice, deviceById, emptyLab, models } from './network.js';
-import { servicePath } from './services.js';
+import { serviceOn, servicePath } from './services.js';
 import { interfaceName } from './ios.js';
 import { enter, integer, invalid, keyName, own, reply } from './cli-utils.js';
 
@@ -33,6 +33,7 @@ function snapshot(d) {
     if(p.gre)delete p.gre.counters;
     if(p.nhrp)delete p.nhrp.shortcuts;
   }
+  delete data.cmeRuntime;
   if(data.aaa)delete data.aaa.sessions;
   if(data.qos)delete data.qos.stats;
   if(data.nat)delete data.nat.translations;
@@ -227,6 +228,7 @@ export function deviceFilesCLI(lab,d,s,args,c,running,dispatch) {
         const hit=servicePath(lab,d,target[1],'tftp',address);
         if(!hit.ok)return invalid(hit.reason);
         const server=hit.destination;
+        if(!serviceOn(server,'tftp'))return invalid('The CME TFTP profile service is read-only.');
         (server.files??={})[target[2]]=text;
         (server.configBackups??={})[target[2]]=operation==='running-config'?snapshot(d):d.startupState;
         return reply('File written to '+server.name+'.',hit.path);

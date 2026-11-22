@@ -14,7 +14,7 @@ import { eigrpRoutes } from './eigrp.js';
 import { ospfRoutes } from './ospf.js';
 import { permitsPacket } from './acl.js';
 import { channelPort, operationalPort, vlanDatabase, vtpPruned } from './campus.js';
-import { bridgeState, memberPorts, permitsSwitchIngress, restoreChannelPorts } from './switching.js';
+import { bridgeState, memberPorts, permitsSwitchIngress, restoreChannelPorts, stpForwards } from './switching.js';
 import { natIn, natOut } from './nat.js';
 import { acceptsDhcpOffer, inspectArp, learnDhcp } from './layer2-security.js';
 
@@ -100,7 +100,7 @@ export function restoreLab(serialized) {
   }
   for(const {a,b} of data.links) addLink(restored,a,b);
   restored.nextId=data.nextId;
-  if(['enterprise','branch','routing','provider-vpn','dmvpn'].includes(data.scenario))restored.scenario=data.scenario;
+  if(['enterprise','branch','routing','provider-vpn','dmvpn','voice-cme'].includes(data.scenario))restored.scenario=data.scenario;
   return restored;
 }
 
@@ -191,7 +191,7 @@ export function segment(lab,source,port,learn=false,traffic='arp') {
   const forwards=(device,port,vlan)=>{
     if (!tree.has(vlan)) tree.set(vlan,bridgeState(lab,vlan));
     const role=tree.get(vlan).get(device.id)?.ports[port];
-    return !['Altn','suspended','err-disabled','root-inconsistent','loop-inconsistent'].includes(role);
+    return stpForwards(role);
   };
   const push=(device,entry,tag,path,hops)=> {
     const key=JSON.stringify([device.id,entry,tag]);
@@ -481,7 +481,7 @@ export function requestDhcp(lab,host) {
       if(range){n=range[1];continue;}
       const ip=dotted(n);
       if(occupied.has(ip))continue;
-      host.host.lease={ip,prefix:pool.prefix,gateway:pool.gateway,server:device.id,dns:pool.dns,domain:pool.domain,tftp:pool.tftp};
+      host.host.lease={ip,prefix:pool.prefix,gateway:pool.gateway,server:device.id,dns:pool.dns,domain:pool.domain,tftp:pool.tftp,duration:pool.lease};
       for(const h of hops)learnDhcp(h.device,h.port,h.vlan,host,ip);
       return {ok:true,path,ip,server:device.name};
     }

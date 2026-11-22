@@ -119,7 +119,7 @@ export function mountPractice({tracks,openSession,source,renderCoverage,onWirele
     $('lab-title').textContent=lab.title;
     $('lab-task').textContent=lab.task;
     const pointers=source?.(lab)??lab.source;
-    $('lab-objective').textContent=[labObjectives(lab).map(id=>id==='extra.wlan'?'Wireless supplement':id).join(' · '),pointers].filter(Boolean).join(' · ');
+    $('lab-objective').textContent=[labObjectives(lab).map(id=>id.startsWith('extra.voice-')?'Enterprise voice supplement':id==='extra.wlan'?'Wireless supplement':id).join(' · '),pointers].filter(Boolean).join(' · ');
     $('lab-topology').replaceChildren(...lab.topology.map(label=>node('li',label)));
     $('lab-devices').replaceChildren(...lab.devices.map(name=>button(name,()=>{
       device=name;

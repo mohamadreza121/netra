@@ -1,4 +1,5 @@
 import { addressOf, labelMode, modeFor, scope } from './lesson.mjs';
+import { makeLivePracticeSession } from './live-session.mjs';
 import { tokens } from '../labsim/grammar.js';
 
 const generic = {
@@ -55,6 +56,7 @@ function getIndex(lab) {
 }
 
 export function makeCCNPSession(lab) {
+  if(lab.buildWorkspace)return makeLivePracticeSession(lab);
   const steps=lab.steps;
   const index=getIndex(lab);
   const modes={...lab.initialModes};

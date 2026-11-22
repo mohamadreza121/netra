@@ -65,6 +65,8 @@ const portCost=(device,port,vlan)=>{
 };
 const operationalPortPlaceholder=(d,port)=>d.ports[channelPort(d,port)]??d.ports[port];
 
+export const stpForwards = role => !['Altn','suspended','err-disabled','root-inconsistent','loop-inconsistent'].includes(role);
+
 export function bridgeState(lab, vlan) {
   const nodes=lab.devices.filter(d=>d.type==='switch'&&vlanExists(d,vlan,lab));
   const base=new Map(nodes.map(d=>[d.id,{}]));

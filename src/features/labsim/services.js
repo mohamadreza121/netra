@@ -3,6 +3,7 @@ import { serverV6 } from './ipv6-services.js';
 import { parsePrefixV6, parseV6, formatV6, routesV6, neighborRowsV6, transactionV6 } from './ipv6.js';
 import { integer, invalid, keyName, own, reply } from './cli-utils.js';
 import { clockDisplay } from './device-files.js';
+import { cmeTftpFile } from './cme.js';
 
 const protocols=['dhcp','dhcpv6','dns','http','https','ntp','syslog','tftp','sip','netflow'];
 const servicePorts={dns:53,dhcp:67,http:80,https:443,ntp:123,syslog:514,tftp:69,sip:5060,netflow:2055};
@@ -50,7 +51,8 @@ export function servicePath(lab,client,serverIp,service, sourceAddress) {
   const result=v6?transactionV6(lab,client,serverIp,{sourceAddress,packet,learn:web||service==='dns'}):
     transaction(lab,client,serverIp,{sourceAddress,packet,observe:web||service==='dns'});
   if (!result.ok)return result;
-  if (!serviceOn(result.destination,service) && !(service==='ntp'&&result.destination.time?.master)) {
+  const builtIn=(service==='ntp'&&result.destination.time?.master)||(service==='tftp'&&result.destination.cme?.files);
+  if (!serviceOn(result.destination,service) && !builtIn) {
     return {...result,ok:false,reason:result.destination.name+' is reachable, but '+service.toUpperCase()+' is off.'};
   }
   return result;
@@ -159,13 +161,15 @@ function transfer(lab,d,[,action,address,name,...body]) {
   if(!keyName(name))return invalid('Use a simple lab filename.');
   const hit=servicePath(lab,d,address,'tftp');
   if(!hit.ok)return reply(hit.reason,hit.path);
-  const files=store(hit.destination,'files');
+  const profile=cmeTftpFile(hit.destination,name);
   if(action==='put'){
+    if(!serviceOn(hit.destination,'tftp')||profile)return reply('TFTP access violation: this configuration file service is read-only.',hit.path);
+    const files=store(hit.destination,'files');
     files[name]=body.join(' ').slice(0,2048);
     if(hit.destination.configBackups)delete hit.destination.configBackups[name];
     return reply('File written to '+hit.destination.name+'.',hit.path);
   }
-  return reply(own(files,name)??'Error: file not found.',hit.path);
+  return reply(profile??own(hit.destination.files,name)??'Error: file not found.',hit.path);
 }
 
 export function appendLog(d,event) {

@@ -1,6 +1,9 @@
-import { deviceById, gateway, hostIp, inSubnet, ipv4, linkUp, macAddress, models, networkAddress, peer, prefixLength, routeTable } from './network.js';
-import { operationalPort, vlanDatabase } from './campus.js';
-import { areaId, ospfInterfaces, ospfNeighbors, ospfSnapshot, routerId } from './ospf.js';
+import { deviceById, hostIp, ipv4, linkUp, macAddress, models, networkAddress, peer, prefixLength } from './network.js';
+import { vlanDatabase } from './campus.js';
+import { interfacesShow } from './interface-show.js';
+import { showDhcp } from './dhcp-show.js';
+import { showIPv4Routes, showIPProtocols, showOSPF } from './routing-show.js';
+import { areaId } from './ospf.js';
 import { parseRule } from './acl.js';
 import { interfacesV6, neighborRowsV6, networkV6, parsePrefixV6, parseV6, routesV6, formatV6 } from './ipv6.js';
 
@@ -65,18 +68,33 @@ function discover(lab,device,protocol) {
 const rows = (header, entries, empty='No entries.')=>reply(entries.length?[header,...entries].filter(Boolean).join('\n'):empty);
 
 export function diagnostic(lab,d,s,args,c) {
-  if (c==='show version') return reply(`Netra LabSim IOS-style console\nPlatform: ${models[d.type].title}\nHostname: ${d.name}\nEthernet ports: ${models[d.type].ports.length}`);
+  if(c==='show version')return reply([
+    'Netra LabSim IOS-style console', 'Platform: '+models[d.type].platform, 'Hostname: '+d.name,
+    'System image file is "LabSim built-in device model"',
+    ...(d.bootInfo?.image?['Configured boot image: '+d.bootInfo.image]:[]),
+    'Base Ethernet MAC Address: '+macAddress(d),'Ethernet ports: '+models[d.type].ports.length,
+    'Configuration register is '+(d.bootInfo?.register??'0x2102')
+  ].join('\n'));
   if (c==='show history') return reply((s.history??[]).join('\n'));
   if (/^show (cdp|lldp)(?: |$)/.test(c)) {
-    const protocol=args[1];
-    if (!args[2]) return reply(protocol.toUpperCase()+': '+((d.discovery?.[protocol]??(protocol==='cdp'))?'enabled':'disabled'));
-    return rows('Device ID    Local Interface    Port ID',discover(lab,d,protocol).map(({port,node,remote})=>
-      `${node.name.padEnd(13)}${port.padEnd(19)}${remote}${args[3]?'  '+models[node.type].title+'  '+(hostIp(node)??Object.values(node.ports).find(p=>p.address)?.address??'unassigned'):''}`),'No neighbors.');
+    const protocol=args[1],enabled=d.discovery?.[protocol]??(protocol==='cdp');
+    if(!args[2])return reply(protocol.toUpperCase()+': '+(enabled?'enabled':'disabled'));
+    const neighbors=discover(lab,d,protocol);
+    const capability={router:'R',switch:'S I',phone:'H P',ap:'W',wlc:'W'};
+    if(args[3]==='detail')return rows('',neighbors.map(({port,node,remote})=>[
+      'Device ID: '+node.name,
+      'Entry address(es): '+(hostIp(node)??Object.entries(node.ports).find(([name,p])=>p.address&&linkUp(lab,node,name))?.[1].address??'unassigned'),
+      'Platform: '+models[node.type].platform+', Capabilities: '+capability[node.type],
+      'Interface: '+port+', Port ID (outgoing port): '+remote
+    ].join('\n')+'\n'),'No neighbors.');
+    return rows('Device ID        Local Intrfce    Capability  Platform          Port ID',neighbors.map(({port,node,remote})=>
+      node.name.padEnd(17)+port.padEnd(17)+capability[node.type].padEnd(12)+models[node.type].title.padEnd(18)+remote),'No neighbors.');
   }
   if (c==='show arp'||c.startsWith('show arp ')||c==='show ip arp'||c.startsWith('show ip arp ')) {
     const address=args.at(-1);
-    return rows('Address          Hardware Addr   Interface',Object.entries(d.arp??{}).filter(([ip,entry])=>
-      (address==='arp'||ip===address)&&deviceById(lab,entry.device)&&linkUp(lab,d,entry.port)).map(([ip,e])=>`${ip.padEnd(17)}${e.mac.padEnd(16)}${e.port}`),'No ARP entries. Try ping first.');
+    return rows('Protocol  Address          Age (min)  Hardware Addr   Type   Interface',Object.entries(d.arp??{}).filter(([ip,entry])=>
+      (address==='arp'||ip===address)&&deviceById(lab,entry.device)&&linkUp(lab,d,entry.port)).map(([ip,e])=>
+      'Internet  '+ip.padEnd(17)+'-'.padEnd(11)+e.mac.padEnd(16)+'ARPA   '+e.port),'No ARP entries. Try ping first.');
   }
   if (c.startsWith('show mac address-table')) {
     const entries=Object.values(d.macTable??{}).filter(e=>linkUp(lab,d,e.port)&&Object.hasOwn(vlanDatabase(lab,d).vlans,e.vlan));
@@ -85,66 +103,16 @@ export function diagnostic(lab,d,s,args,c) {
     const displayed=args[3]==='static'||args[3]==='secure'?Object.entries(d.ports).flatMap(([port,p])=>[...(p.security?.static??[]),...(args[3]==='secure'?p.security?.learned??[]:[])].map(mac=>({mac,port,vlan:p.vlan,type:args[3].toUpperCase()}))):entries.filter(e=>!filter||(filter==='vlan'?e.vlan===Number(value):filter==='interface'?e.port===interfaceName([value]):e.mac===value.toLowerCase()));
     return rows('Vlan   Mac Address     Type      Ports',displayed.map(e=>`${String(e.vlan).padEnd(7)}${e.mac.padEnd(16)}${(e.type??'DYNAMIC').padEnd(10)}${e.port}`),'No MAC address entries.');
   }
-  if (c.startsWith('show interfaces')||c==='show ip interface'||c.startsWith('show ip interface ')) {
-    if (['show interfaces status','show interfaces trunk','show ip interface brief'].includes(c)) return null;
-    const tail=args.slice(c.startsWith('show ip ')?3:2);
-    const view=['description','switchport','status','trunk'].includes(tail.at(-1))?tail.pop():null;
-    const name=tail.length?interfaceName(tail):null;
-    if (tail.length&&!d.ports[name]) return invalid('This interface does not exist.');
-    const entries=name?[[name,d.ports[name]]]:Object.entries(d.ports);
-    return rows('',entries.map(([port,p])=>{
-      const state=linkUp(lab,d,port)?'up':p.up?'down':'administratively down';
-      if (view==='description') return [port,state,p.description??''].join('  ');
-      if(view==='switchport'||view==='trunk'){
-        const active=d.type==='switch'?operationalPort(lab,d,port):p;
-        return `${port}  Administrative Mode: ${p.mode??'routed'}${p.mode==='dynamic'?' '+p.dtp:''}  Operational Mode: ${active.mode??'routed'}  Access VLAN: ${active.vlan??'—'}  Native VLAN: ${active.native??'—'}  Voice VLAN: ${active.voice??'—'}  Allowed: ${active.allowed?.join(',')??'all'}`;
-      }
-      if (view==='status') return `${port}  ${state}  ${p.mode==='trunk'?'trunk':p.vlan??'routed'}`;
-      return `${port} is ${state}, line protocol is ${linkUp(lab,d,port)?'up':'down'}\n  Description: ${p.description??'—'}\n  IPv4: ${p.address?p.address+'/'+p.prefix:'unassigned'}\n  Duplex: ${p.duplex??'auto'}  Speed: ${p.speed??'auto'}\n  Inbound ACL: ${p.acl?.in??'—'}  Outbound ACL: ${p.acl?.out??'—'}`;
-    }));
-  }
-  if (c.startsWith('show ip route')) {
-    const vrf=args[3]==='vrf'?args[4]:undefined;
-    const query=args[vrf?5:3];
-    const routes=routeTable(lab,d,vrf);
-    const local=routes.filter(r=>r.protocol==='connected'&&r.prefix<32).map(r=>({...r,destination:d.ports[r.port].address,prefix:32,protocol:'local'}));
-    const all=[...routes,...local].sort((a,b)=>b.prefix-a.prefix);
-    const selected = !query?all:validIp(query)?all.filter(r=>inSubnet(query,r.destination,r.prefix)).slice(0,1):all.filter(r=>r.protocol===query);
-    return rows('',selected.map(r=>{
-      const code={connected:'C',local:'L',static:r.prefix?'S':'S*',ospf:'O'+(r.ospfType?' '+r.ospfType:''),bgp:'B',eigrp:r.external?'D EX':'D'}[r.protocol];
-      return `${(code.length<3?code.padEnd(3):code+' ')}${r.destination}/${r.prefix} ${r.next?`[${r.distance}/${r.metric??0}] via ${r.next}, ${r.port}`:`is directly connected, ${r.port}`}`;
-    }),'No active routes.');
-  }
-  if(c==='show ip protocols'){
-    const body=[];
-    if(d.ospf)body.push('Routing Protocol is "ospf '+d.ospf.id+'"',...d.ospf.networks.map(r=>
-      '  Network '+r.address+' '+r.wildcard+' area '+(r.area??0)));
-    if(d.eigrp?.asn)body.push('Routing Protocol is "eigrp '+d.eigrp.asn+'"',...d.eigrp.networks.map(r=>'  Network '+r.address+' '+r.wildcard));
-    if(d.bgp)body.push('Routing Protocol is "bgp '+d.bgp.asn+'"',...Object.entries(d.bgp.neighbors).map(([ip,n])=>'  Neighbor '+ip+' AS '+n.asn));
-    return reply(body.join('\n')||'No dynamic IPv4 routing protocols configured.');
-  }
-  if (c.startsWith('show ip ospf')) {
-    if (!d.ospf) return reply('OSPF is not configured.');
-    const header=`OSPF process ${d.ospf.id}, Router ID ${routerId(d)??'unassigned'}, Areas ${[...new Set(ospfInterfaces(lab,d).map(row=>row.area))].join(', ')||'none'}`;
-    if (args[3]==='neighbor') return rows('Neighbor ID      State     Address          Interface',
-      ospfNeighbors(lab,d,ospfSnapshot(lab)).map(n=>`${routerId(n.device).padEnd(17)}FULL      ${n.remote.address.padEnd(17)}${n.local.port}  area ${n.local.area}${args[4]?'   '+n.device.name:''}`),'No FULL adjacencies.');
-    if (args[3]==='interface') {
-      const name=args[4]&&args[4]!=='brief'?interfaceName(args.slice(4)):null;
-      return rows('Interface   Address             Area  Cost  Hello/Dead',
-        ospfInterfaces(lab,d).filter(p=>!name||p.port===name).map(p=>`${p.port.padEnd(12)}${(p.address+'/'+p.prefix).padEnd(20)}${String(p.area).padEnd(7)}${String(p.cost).padEnd(6)}${p.hello}/${p.dead} ${p.passive?'passive':p.network}`),'No active OSPF interfaces.');
-    }
-    if (args[3]==='database') return rows('OSPF reachable advertisements',routeTable(lab,d).filter(r=>r.protocol==='ospf').map(r=>r.destination+'/'+r.prefix+' via '+r.next+' metric '+r.metric));
-    return reply(header+'\n'+d.ospf.networks.map(r=>' network '+r.address+' '+r.wildcard+' area '+(r.area??0)).join('\n'));
-  }
+  if(c.startsWith('show interfaces')||args[1]==='ip'&&args[2]==='interface')return interfacesShow(lab,d,args);
+  if(args[1]==='ip'&&args[2]==='route')return showIPv4Routes(lab,d,args);
+  if(c==='show ip protocols')return showIPProtocols(lab,d);
+  if(args[1]==='ip'&&args[2]==='ospf')return showOSPF(lab,d,args);
   if (c.startsWith('show access-lists')||c.startsWith('show ip access-lists')) {
     const name=args.at(-1);
     return rows('',Object.entries(d.acl??{}).filter(([key])=>name==='access-lists'||key===name).flatMap(([key,list])=>
       [list.type+' IP access list '+key,...list.rules.map(rule=>'  '+rule.sequence+' '+rule.raw+(rule.hits?' ('+rule.hits+' matches)':''))]),'No access lists.');
   }
-  if (c.startsWith('show ip dhcp pool')) {
-    return rows('',Object.entries(d.pools).filter(([name])=>!args[4]||name===args[4].toUpperCase()).map(([name,p])=>
-      `Pool ${name}  ${p.network??'unassigned'}/${p.prefix??'—'}  Router ${p.gateway??'—'}  DNS ${p.dns??'—'}  Leased: ${lab.devices.filter(client=>client.host.lease?.server===d.id&&inSubnet(client.host.lease.ip,p.network,p.prefix)).length}`),'No DHCP pools.');
-  }
+  if(args[1]==='ip'&&args[2]==='dhcp'&&['binding','pool'].includes(args[3]))return showDhcp(lab,d,args);
   if (c.startsWith('show ipv6 interface')) {
     const name=args[3]&&args[3]!=='brief'?interfaceName(args.slice(3)):null;
     if (args[3]&&args[3]!=='brief'&&!d.ports[name]) return invalid('This interface does not exist.');

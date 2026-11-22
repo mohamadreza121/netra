@@ -1,3 +1,6 @@
+import { cmeRouter, phoneLines, registrationStatus, usesCme } from './cme.js';
+import { callDetails } from './voice-calls.js';
+import { voiceCmeLab } from './voice-lab.js';
 import { mountCommandIndex } from './command-index-ui.js';
 import { addDevice, addLink, branchLab, capacity, deviceById, deviceLimit, emptyLab, endpoint, gateway, hostIp, hostPrefix, isEndpoint, isHost, linkUp, models, peer, removeDevice, restoreLab, voiceVlan, wifiUp } from './network.js';
 import { dmvpnLab, providerVpnLab } from './vpn-labs.js';
@@ -198,18 +201,41 @@ function setConsole(showHistory=false) {
   }
 }
 
+function renderPhoneControls(phone) {
+  const controls=$('sim-phone-controls');
+  const isPhone=phone?.type==='phone';
+  controls.hidden=!isPhone;
+  if(!isPhone)return [];
+  const router=cmeRouter(lab,phone),managed=usesCme(lab,phone);
+  const registration=managed?registrationStatus(lab,phone,router):null;
+  const call=managed?callDetails(lab,router,phone)[0]:null;
+  const incoming=call?.state==='RINGING'&&call.callee===phone.id;
+  const numbers=registration?.ok?phoneLines(router.cme,registration.record).map(({line})=>line.number):[];
+  if(!managed&&phone.host.extension)numbers.push(phone.host.extension);
+  const status=call?.state==='RINGING'?(incoming?'Ringing · incoming from '+call.from:'Ringback · calling '+call.to):
+    call?.state==='CONNECTED'?'Connected · '+call.from+' → '+call.to:
+    registration?.ok?'SCCP registered'+(numbers.length?' · '+numbers.join(', '):' · no assigned line'):
+    managed?'SCCP unregistered':phone.host.sip?'SIP handset · '+phone.host.extension:'Phone idle';
+  $('sim-phone-state').textContent=status;
+  controls.querySelector('[data-phone-command="answer"]').disabled=!incoming;
+  controls.querySelector('[data-phone-command="reject"]').disabled=!incoming;
+  controls.querySelector('[data-phone-command="hangup"]').disabled=!call&&!phone.host.call;
+  return numbers;
+}
+
 function renderInspector() {
   const d=active();
   $('sim-inspector-title').textContent=d?d.name+' · '+models[d.type].title:'Device';
   $('sim-remove').disabled=!d;
   const items=[];
+  const numbers=renderPhoneControls(d);
   if(d){
     items.push(['Platform',models[d.type].platform]);
     if(isEndpoint(d)&&d.type!=='wlc')items.push(['IPv4',hostIp(d)?hostIp(d)+'/'+hostPrefix(d):'Unassigned'],['Gateway',gateway(d)??'—']);
     if(isHost(d)) {
       const network=wifiSession(lab,d);
       if(network)items.push(['Wi-Fi',network.ssid+' · '+network.ap.name+(network.vlan?' · VLAN '+network.vlan:'')]);
-      if(d.type==='phone')items.push(['Extension',d.host.extension??'Unassigned'],['Voice VLAN',voiceVlan(lab,d)??'—']);
+      if(d.type==='phone')items.push(['Extension',numbers.join(', ')||'Unassigned'],['Voice VLAN',voiceVlan(lab,d)??'—']);
     }
     if(d.type==='ap'){
       items.push(['Radio',d.radio.enabled?(d.capwap?'On · managed':'On · '+d.radio.ssid):'Off']);
@@ -324,7 +350,7 @@ function renderCapacity(){
   }
 }
 function refresh() {
-  $('sim-board-name').textContent={enterprise:'Enterprise Campus',routing:'Routing Core',branch:'Branch LAN','provider-vpn':'Provider VPN',dmvpn:'DMVPN Phase 3'}[lab.scenario]??'Topology';
+  $('sim-board-name').textContent={enterprise:'Enterprise Campus',routing:'Routing Core',branch:'Branch LAN','provider-vpn':'Provider VPN',dmvpn:'DMVPN Phase 3','voice-cme':'SCCP Voice Lab'}[lab.scenario]??'Topology';
   for(const panel of document.querySelectorAll('[data-lab-scenario]'))panel.hidden=panel.dataset.labScenario!==lab.scenario;
   renderBoard();renderCables();renderCapacity();select(selected);
 }
@@ -388,8 +414,8 @@ $('sim-console').addEventListener('submit',event=>{
   logConsole(d,before+' '+displayed,result.text);
   if(mode!==(s.remote?.session.mode??s.mode)||remote!==s.remote?.id)renderReference();
   traffic=result.path??[];
-  save();
   renderInspector();
+  save();
   renderCables();
   for(const item of $('sim-nodes').children){
     const itemDevice=deviceById(lab,item.dataset.id);
@@ -414,9 +440,9 @@ confirmDialog.addEventListener('close',()=>{
   if(confirmDialog.returnValue==='confirm')pendingAction?.();
   pendingAction=undefined;
 });
-function replace(next,label){
+function replace(next,label,initialDevice='pc'){
   lab=next;traffic=[];histories.clear();sessions.clear();recentCommands.clear();
-  selected=lab.devices.find(d=>d.type==='pc')?.id??lab.devices[0]?.id;
+  selected=lab.devices.find(d=>d.type===initialDevice)?.id??lab.devices[0]?.id;
   refresh();save();say(label);
 }
 $('sim-enterprise').addEventListener('click',()=>requestChange('Load Enterprise Campus?','This replaces the current browser workspace. You can export it first.',()=>replace(enterpriseLab(),'Enterprise Campus loaded. Start with PC1 or select a command below the topology.')));
@@ -431,6 +457,21 @@ for(const control of document.querySelectorAll('[data-lab-command]'))control.add
   }
   input.value=control.dataset.labCommand;
   input.focus();
+});
+for(const control of document.querySelectorAll('[data-phone-command]'))control.addEventListener('click',()=>{
+  const d=active();
+  if(d?.type!=='phone'||sessions.get(d.id)?.remote||sessions.get(d.id)?.passwordPrompt)return;
+  input.value=control.dataset.phoneCommand;
+  $('sim-console').requestSubmit();
+});
+$('sim-voice-lab').addEventListener('change',event=>{
+  const mode=event.target.value;
+  event.target.value='';
+  if(!['ready','starter'].includes(mode))return;
+  requestChange('Load the SCCP Voice Lab?','This replaces the current browser workspace. You can export it first.',()=>{
+    const message=mode==='ready'?'Voice Lab loaded. Dial 2002 from TEL1, then answer on TEL2.':'Voice Lab loaded. Configure DHCP option 150 and CME on R1.';
+    replace(voiceCmeLab({mode}),message,mode==='ready'?'phone':'router');
+  });
 });
 $('sim-vpn-lab').addEventListener('change',event=>{
   const choice=event.target.value;

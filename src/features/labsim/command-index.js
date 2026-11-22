@@ -1,5 +1,6 @@
 import { commandReference as ccnaReference } from '../ccna/catalog.mjs';
 import { labelMode } from '../ccnp/lesson.mjs';
+import { makeLivePracticeSession } from '../ccnp/live-session.mjs';
 import { labs as ccnpLabs } from '../ccnp/catalog.mjs';
 import { addDevice, emptyLab } from './network.js';
 import { execute, terminalSession } from './cli.js';
@@ -45,10 +46,11 @@ export function buildCommandIndex() {
   const examples=[];
   for(const [lesson,steps] of byLab){
     const ccna=!lesson.topics,tracks=ccna?['ccna']:Object.keys(lesson.topics).filter(key=>lesson.topics[key].length);
+    const guidedVoice=lesson.buildWorkspace?makeLivePracticeSession(lesson):null;
     const deviceSet=new Map(),contextSet=new Map(),workspace=emptyLab();
     for(const device of lesson.devices){
       const type=typeOf(device);
-      if(type)deviceSet.set(device,addDevice(workspace,type));
+      if(type&&!guidedVoice)deviceSet.set(device,addDevice(workspace,type));
       if(ccna)contextSet.set(device,new Map());
     }
     for(const entry of steps){
@@ -56,7 +58,7 @@ export function buildCommandIndex() {
       const mode=describe(entry,ccna,contexts);
       const type=typeOf(entry.device)??null;
       let labSim=false;
-      try{labSim=probe(workspace,deviceSet.get(entry.device),entry,mode);}catch{
+      try{labSim=guidedVoice?guidedVoice.run(entry.device,entry.command).ok:probe(workspace,deviceSet.get(entry.device),entry,mode);}catch{
         // CLI inputs can depend on unmodeled hardware, cable state or examples outside this device model.
         // Every example still has a directly addressable guided console.
       }

@@ -154,7 +154,7 @@ test('OSPF admits matching areas, builds inter-area routes and applies redistrib
     'int lo1','ip address 10.9.9.9 255.255.255.255','exit',
     'ip prefix-list EXPORT permit 10.9.9.9/32','route-map EXPORT permit 10','match ip address prefix-list EXPORT','set tag 20','exit',
     'router ospf 1','redistribute connected subnets route-map EXPORT');
-  assert.match(b.run('sh ip ospf neighbor').text,/FULL.*area 20/);
+  assert.match(b.run('sh ip ospf neighbor detail').text,/area 20 via interface Gi0\/1[\s\S]*State is FULL/);
   assert.match(a.run('sh ip route ospf').text,/O IA\s+10\.3\.3\.3\/32/);
   assert.match(a.run('sh ip route ospf').text,/O E2\s+10\.9\.9\.9\/32/);
   assert.match(a.run('ping 10.9.9.9 source Lo0').text,/100 percent/);
@@ -162,7 +162,7 @@ test('OSPF admits matching areas, builds inter-area routes and applies redistrib
   assert.doesNotMatch(b.run('sh ip ospf nei').text,/10\.0\.0\.6/);
   assert.doesNotMatch(a.run('sh ip route ospf').text,/10\.3\.3\.3/);
   b.config('router ospf 1','area 20 stub no-summary');
-  assert.match(c.run('sh ip route ospf').text,/O IA\s+0\.0\.0\.0\/0/);
+  assert.match(c.run('sh ip route ospf').text,/O IA\*\s+0\.0\.0\.0\/0/);
 });
 
 test('VRF forwarding keeps overlapping prefixes isolated across physical links',()=>{

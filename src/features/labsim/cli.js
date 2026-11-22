@@ -1,3 +1,4 @@
+import { cmeAfterEndpoint, cmeCLI, cmePhoneCLI, cmeRunning } from './cme-cli.js';
 import { ipsecCLI, ipsecRunning } from './ipsec.js';
 import { deviceFilesCLI, deviceFilesRunning } from './device-files.js';
 import { packetPolicyCLI, packetPolicyPort, packetPolicyPortLines, packetPolicyRunning } from './packet-policy.js';
@@ -42,6 +43,7 @@ export const syntax = {
     ['IPv4 and static routing','ip address 192.0.2.1 255.255.255.0 · no shutdown · shutdown','Enter interface mode before configuring an address.'],
     ['Static routes','ip route 10.20.0.0 255.255.0.0 192.0.2.2 [distance] · no ip route … · show ip route','The next hop must resolve through a live route. Use 0.0.0.0 0.0.0.0 for a default route.'],
     ['Router-on-a-stick','interface gi0/0.10 · encapsulation dot1Q 10','Bring up the parent port, then address each subinterface. Connect the parent to a switch trunk.'],
+    ['Voice gateway (SCCP)','telephony-service · max-ephones · max-dn · ip source-address · create cnf-files · ephone-dn · show ephone registered','Assign extensions with auto assign or an ephone MAC and button mapping. Deliver the TFTP address with DHCP option 150.'],
     ['Router DHCP','ip dhcp excluded-address 192.168.10.1 192.168.10.20 · ip dhcp pool STAFF · network 192.168.10.0 /24 · default-router 192.168.10.1 · show ip dhcp binding','Create a pool on the client VLAN. Clients request a lease with ipconfig /renew.'],
     ['Connectivity','ping 192.168.10.21 · traceroute 192.168.10.21','LabSim displays the simulated path and the first failure it can identify.']
   ],
@@ -57,7 +59,7 @@ export const syntax = {
     ['Wi-Fi client','wifi scan · wifi join Netra-Staff NetraLab26 · wifi status · wifi leave','These are LabSim client controls. Quote an SSID or key with spaces. A joined client uses Wi-Fi for its lab traffic.']
   ],
   phone:[
-    ['Voice endpoint','extension 2001 · dial 2002 · show phone','These LabSim controls set an extension and test IP reachability to a second phone. Calls are modeled as signaling checks.'],
+    ['SCCP voice endpoint','boot · show phone network · show sccp status · dial 2002 · answer · hangup · show phone log','Boot to request DHCP and register with CME. Dial from one phone and answer from the other.'],
     ['Network and Wi-Fi','ipconfig /renew · ipconfig · wifi scan · wifi join Netra-Staff NetraLab26','Phones can use a wired voice VLAN or join an AP.']
   ],
   wlc:[
@@ -81,6 +83,9 @@ export function terminalSession(d) {
 
 function promptMode(session) {
   if(session.mode==='archive')return 'config-archive';
+  if(session.mode==='telephony')return 'config-telephony';
+  if(session.mode==='ephone')return 'config-ephone';
+  if(session.mode==='ephoneDn')return 'config-ephone-dn';
   return { global:'config',interface:'config-if',vlan:'config-vlan',pool:'dhcp-config',ospf:'config-router',acl:'config-acl',range:'config-if-range',line:'config-line',radius:'config-radius-server',tacacs:'config-server-tacacs',aaagroup:'config-sg',wlan:'config-wlan',policy:'config-wireless-policy',tag:'config-policy-tag',apConfig:'config-ap',bgp:'config-router',bgpAf:'config-router-af',eigrp:'config-router',eigrpNamed:'config-router',eigrpAf:'config-router-af',eigrpInterface:'config-router-af-interface',eigrpTopology:'config-router-af-topology',keyChain:'config-keychain',keyChainKey:'config-keychain-key',routeMap:'config-route-map',vrf:'config-vrf',vrfAf:'config-vrf-af',sla:'config-ip-sla',flowRecord:'config-flow-record',flowExporter:'config-flow-exporter',flowMonitor:'config-flow-monitor',ikeProposal:'config-ikev2-proposal',ikePolicy:'config-ikev2-policy',ikeProfile:'config-ikev2-profile',ikeKeyring:'config-ikev2-keyring',ikePeer:'config-ikev2-keyring-peer',ipsecTransform:'cfg-crypto-trans',ipsecProfile:'ipsec-profile',acl6:'config-ipv6-acl',timeRange:'config-time-range',qosClassMap:'config-cmap',qosPolicy:'config-pmap',qosClass:'config-pmap-c',qosControl:'config-cp',ospfv3:'config-router',ospfv3Af:'config-router-af',mst:'config-mst',pool6:'config-dhcpv6',raGuard:'config-nd-raguard' }[session.mode];
 }
 export function prompt(d,session,lab) {
@@ -135,7 +140,7 @@ function running(d) {
   if (d.stp?.portfast) rows.push('spanning-tree portfast default');
   if (d.stp?.guard) rows.push('spanning-tree portfast bpduguard default');
   for (const [vlan,values] of Object.entries(d.stp?.vlans??{}))for(const [key,value] of Object.entries(values))rows.push('spanning-tree vlan '+vlan+' '+key+' '+value);
-  rows.push(...deviceFilesRunning(d),...layer2Running(d),...serviceRunning(d),...identityRunning(d),...wirelessRunning(d),...policyRunning(d),...vrfRunning(d),...ospfv3Running(d),...qosRunning(d),...mplsRunning(d),...packetPolicyRunning(d),...ipsecRunning(d),...availabilityRunning(d),...flowRunning(d),...ipv6ServicesRunning(d));
+  rows.push(...cmeRunning(d),...deviceFilesRunning(d),...layer2Running(d),...serviceRunning(d),...identityRunning(d),...wirelessRunning(d),...policyRunning(d),...vrfRunning(d),...ospfv3Running(d),...qosRunning(d),...mplsRunning(d),...packetPolicyRunning(d),...ipsecRunning(d),...availabilityRunning(d),...flowRunning(d),...ipv6ServicesRunning(d));
   if (d.ipv4Routing!==undefined) rows.push((d.ipv4Routing?'':'no ')+'ip routing');
   if (d.dhcpDisabled) rows.push('no service dhcp');
   if (d.ipv6Routing) rows.push('ipv6 unicast-routing');
@@ -250,6 +255,8 @@ function connectivity(lab,d,command,ip,options,count=5) {
 }
 
 function show(lab,d,s,args,c) {
+  const voice=cmeCLI(lab,d,s,args,c);
+  if(voice)return voice;
   const campus=campusCLI(lab,d,s,args,c);
   if(campus)return campus;
   if(d.type==='switch'&&(c.startsWith('show ip dhcp snooping')||c.startsWith('show ip arp inspection')))return reply(layer2Show(lab,d,args));
@@ -264,21 +271,21 @@ function show(lab,d,s,args,c) {
     return d.ports[name]?reply(filtered(running(d),'section','interface '+name)):invalid('This interface does not exist.');
   }
   if(c==='show startup-config')return reply(d.startup??'startup-config is not present');
-  if(c==='show ip interface brief')return reply(['Interface     IP-Address       Status                  Protocol',
-    ...Object.entries(d.ports).map(([n,p])=>`${n.padEnd(13)} ${(p.address??'unassigned').padEnd(16)} ${(p.up?(linkUp(lab,d,n)?'up':'down'):'administratively down').padEnd(23)} ${linkUp(lab,d,n)?'up':'down'}`)].join('\n'));
-  if(c==='show interfaces status')return reply(['Port          State         VLAN / mode',
-    ...Object.entries(d.ports).map(([name,p])=>`${name.padEnd(13)} ${(linkUp(lab,d,name)?'connected':p.up?'notconnect':'disabled').padEnd(13)} ${d.type==='switch'?(p.mode==='trunk'?'trunk':p.vlan+(p.voice?' / voice '+p.voice:'')):'routed'}`)].join('\n'));
   if(args[1]==='vlan'&&d.type==='switch'){
     const db=vlanDatabase(lab,d);
-    return reply(['VLAN  Name              Status    Access ports',
-      ...Object.entries(db.vlans).filter(([id,name])=>!args[3]||(args[2]==='id'?String(Number(args[3]))===id:args[3]===name)).map(([id,name])=>
-        `${id.padEnd(5)} ${name.padEnd(17)} ${db.inactive.includes(Number(id))?'suspend  ':'active   '} ${Object.keys(d.ports).filter(key=>{
-          const p=operationalPort(lab,d,key);return p.mode==='access'&&(p.vlan===Number(id)||p.voice===Number(id));
-        }).join(', ')}`)].join('\n'));
+    const active=Object.entries(db.vlans).filter(([id,name])=>!args[3]||(args[2]==='id'?String(Number(args[3]))===id:args[3].toLowerCase()===name.toLowerCase()));
+    if(!active.length)return reply('No matching VLANs in the VLAN database.');
+    return reply(['VLAN Name                             Status    Ports',
+      '---- -------------------------------- --------- -------------------------------',...active.map(([id,name])=>{
+        const ports=Object.keys(d.ports).filter(key=>{
+          const p=operationalPort(lab,d,key);
+          return !key.startsWith('Vlan')&&p.mode==='access'&&(p.vlan===Number(id)||p.voice===Number(id));
+        });
+        const groups=[];
+        for(let i=0;i<ports.length;i+=6)groups.push(ports.slice(i,i+6).join(', '));
+        return id.padEnd(5)+name.padEnd(33)+(db.inactive.includes(Number(id))?'suspend':'active').padEnd(10)+groups.join('\n'+' '.repeat(48));
+      })].join('\n'));
   }
-  if(c==='show interfaces trunk'&&d.type==='switch')return reply(['Port     Status     Native  Allowed VLANs',
-    ...Object.keys(d.ports).map(name=>[name,operationalPort(lab,d,name)]).filter(([,p])=>p.mode==='trunk').map(([name,p])=>`${name.padEnd(8)} ${(linkUp(lab,d,name)?'trunking':'down').padEnd(10)} ${String(p.native).padEnd(7)} ${p.allowed?.join(',')??'all'}`)].join('\n'));
-  if(c.startsWith('show ip dhcp binding')&&d.type==='router')return reply(lab.devices.filter(x=>x.host.lease?.server===d.id&&(!args[4]||args[4]===x.host.lease.ip)).map(x=>`${x.host.lease.ip}   ${x.name}   Automatic`).join('\n')||'No DHCP bindings.');
   return invalid('That show command is unavailable on this device.');
 }
 
@@ -286,8 +293,8 @@ function runEndpoint(lab,d,s,args,c) {
   const [cmd,action,target,extra]=args;
   if(d.type==='ap') return apControllerCLI(lab,d,args,c)??accessPoint(lab,d,args,connectivity);
   const result=(d.type==='ise'?iseCLI(lab,d,args):d.type==='server'?serverCLI(lab,d,args):clientIdentity(lab,d,s,args))
-    ??(d.type==='phone'?phoneService(lab,d,args):null)??clientV6(lab,d,args,c)??hostNetwork(lab,d,args,connectivity);
-  if(result)return result;
+    ??(d.type==='phone'?(cmePhoneCLI(lab,d,args,c)??phoneService(lab,d,args)):null)??clientV6(lab,d,args,c)??hostNetwork(lab,d,args,connectivity);
+  if(result)return d.type==='phone'?cmeAfterEndpoint(lab,d,c,result):result;
   if(cmd==='wifi') {
     if(action==='scan')return reply(lab.devices.filter(x=>x.type==='ap').flatMap(ap=>profiles(lab,ap).filter(p=>p.broadcast).map(p=>
       [p.ssid,{psk:'WPA2-PSK',dot1x:'WPA2-Enterprise',open:'Open'}[p.security],ap.name,apBand(ap)+' GHz / ch '+apChannel(ap)].join('   '))).join('\n')||'No SSIDs visible.');
@@ -585,7 +592,7 @@ export function execute(lab,d,s,input) {
     return destination.ok?connectivity(lab,d,args[0],destination.address,{vrf,sourceAddress,sourcePort:port,dscp:Number(tos)>>2,bytes:Number(size)},Number(repeat)):
       reply(destination.reason,destination.path);
   }
-  const extension=campusCLI(lab,d,s,args,command)??iosServices(lab,d,s,args,command)??identityCLI(lab,d,s,args,command)??wlcCLI(lab,d,s,args,command)
+  const extension=cmeCLI(lab,d,s,args,command)??campusCLI(lab,d,s,args,command)??iosServices(lab,d,s,args,command)??identityCLI(lab,d,s,args,command)??wlcCLI(lab,d,s,args,command)
     ??policyCLI(d,s,args,command)??flowCLI(lab,d,s,args,command)??iosV6Services(lab,d,s,args,command)??availabilityCLI(lab,d,s,args,command)??vrfCLI(d,s,args,command)??qosCLI(d,s,args,command)??mplsCLI(lab,d,s,args,command)??packetPolicyCLI(d,s,args,command)??ipsecCLI(lab,d,s,args,command)??ospfv3CLI(lab,d,s,args,command)??bgpConfig(d,s,args,command)??eigrpConfig(d,s,args,command);
   if(extension)return extension;
   if(s.mode==='exec'){
@@ -631,6 +638,7 @@ export function execute(lab,d,s,input) {
     }
     if(args[0]==='default-router'&&validIp(args[1])){p.gateway=args[1];return reply();}
     if(args[0]==='dns-server'&&validIp(args[1])){p.dns=args[1];return reply();}
+    if(c==='no option 150'){delete p.tftp;return reply();}
     if(args[0]==='option'&&validIp(args[3])){p.tftp=args[3];return reply();}
     if(args[0]==='domain-name'&&/^[a-z0-9.-]+$/i.test(args[1])){p.domain=args[1];return reply();}
     if(args[0]==='lease'&&integer(args[1],0,365)&&integer(args[2]??'0',0,23)&&integer(args[3]??'0',0,59)){p.lease=args.slice(1).join(' ');return reply();}

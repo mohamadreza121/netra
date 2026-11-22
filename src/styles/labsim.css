@@ -179,3 +179,9 @@ html:has(.sim-workspace) { scroll-behavior: auto; }
   .ios-command-actions { justify-content: flex-start; }
 }
 #sim-vpn-lab { min-height: 2rem; max-width: 100%; }
+
+.sim-phone-controls { margin: 0 12px 8px; padding: 10px 12px; border: 1px solid var(--sim-line); border-radius: 4px; }
+.sim-phone-controls[hidden] { display: none; }
+.sim-phone-controls p { margin: 0 0 8px; font-size: .875rem; font-weight: 600; color: var(--sim-accent); }
+.sim-phone-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.sim-scenario a { color: var(--sim-accent); text-decoration: underline; text-underline-offset: .16em; }

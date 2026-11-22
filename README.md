@@ -23,11 +23,16 @@ Open `/labsim/` and choose a preset or build a topology from an empty workspace.
 | --- | --- |
 | Branch LAN | Access and trunk VLANs, router-on-a-stick, voice VLAN, and standalone Wi-Fi |
 | Enterprise Campus | CAPWAP, a Catalyst 9800-style wireless controller, WPA2-Enterprise, ISE RADIUS and TACACS+, wired 802.1X, DHCP relay, SIP, and eBGP |
+| SCCP Voice Lab | DHCP option 150, Cisco Unified CME provisioning, two phones, and a PC behind the first phone |
 | Routing Core | GRE, multi-area OSPF, named and classic EIGRP, and route-map-controlled redistribution |
 | Provider VPN | MPLS LDP, MP-BGP VPNv4, route targets, and VRF forwarding across a provider core |
 | DMVPN Phase 3 | IKEv2 profile matching, mGRE, NHRP registration, and spoke-to-spoke forwarding |
 
 Use the **Course Command Index** on the LabSim page to search CCNA, ENCOR, and ENARSI examples by command, topic, or device. Each entry opens the corresponding practice step with its prerequisites. The **Checked in LabSim** filter lists examples the device model accepted during the build-time command check. The **Guided practice** filter opens examples in the lesson console.
+
+Under **Load a voice lab**, choose **CME · Ready to call** to dial 2002 from TEL1 and answer on TEL2. **CME · Configure the phones** starts with cabling, VLANs and DHCP pools. Provision the phones through DHCP option 150, TFTP and `telephony-service`. In CCNP Practice, the **Enterprise voice supplement** covers automatic registration, manual MAC and button assignment, and a broken voice VLAN. Both walkthroughs run the same simulator as LabSim.
+
+Use `show phone network` and `show sccp status` on a handset. On the router, use `show ephone registered`, `show telephony-service tftp-bindings`, and `show call active voice brief`. The handset’s **Call log** and router’s `show telephony-service events` trace calls from dialing through disconnect or failure. LabSim models signaling and checks RTP reachability with one active call per handset and no audio stream.
 
 The topology editor supports up to ten of each device type. The IOS-style consoles share a forwarding model for supported routes, VLANs, ACLs, tunnels, QoS, wireless clients, and services. Spanning tree and routing updates follow configuration or link changes. IP SLA evaluates reachability on demand. The support for archive, TFTP, and startup configuration lets you restore device settings inside a saved topology.
 

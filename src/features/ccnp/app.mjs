@@ -12,7 +12,7 @@ function coverage({track,domain,matches,node,button,openLab,openConcept}) {
     if(!objectives.length)continue;
     const group=node('section',undefined,'ccnp-coverage-group');
     const heading=node('div',undefined,'ccnp-coverage-title');
-    heading.append(node('h3',title),node('span',weight?weight+'% of exam':'Book supplement'));
+    heading.append(node('h3',title),node('span',weight?weight+'% of exam':'Supplemental practice'));
     const rows=node('ul',undefined,'ccnp-coverage-list');
     for(const [category,key,label] of objectives) {
       const item=node('li');

@@ -1,4 +1,13 @@
-const check = ([id,title,prompt,answer,a,b,why]) => [id.startsWith('extra.')?7:Number(id.split('.')[0]),id,title,prompt,answer,[a,b],why];
+const check = ([id,title,prompt,answer,a,b,why]) => [id.startsWith('extra.voice-')?8:id.startsWith('extra.')?7:Number(id.split('.')[0]),id,title,prompt,answer,[a,b],why];
+
+const voiceConcepts=[
+  ['extra.voice-cme','DHCP and SCCP onboarding','A phone has an address in the voice VLAN but cannot locate the CME configuration files. Which DHCP setting should you verify?',
+    'Option 150, which supplies the TFTP server address','The subnet mask of the attached PC only','The number of DNs on the switch',
+    'Find the TFTP address in the lease, verify the profile is published, and then check SCCP signaling to CME. These are separate steps.'],
+  ['extra.voice-troubleshoot','Voice versus data VLAN','PC1 receives a data DHCP lease through TEL1. The phone receives a data address too and has no TFTP server. Where should you start?',
+    'Verify the voice VLAN on the switch port connected to TEL1','Move PC1 to the voice VLAN','Change the phone’s directory number first',
+    'The phone tags its own traffic for the voice VLAN and passes the PC’s untagged data frames through. A working data lease alone verifies only the data path.']
+];
 
 export const encorConcepts = [
   ['1.1.a','Campus design','A campus grows from two buildings to six. Which change improves aggregation and fault isolation?',
@@ -154,7 +163,7 @@ export const encorConcepts = [
   ['extra.wlanauth','WLAN onboarding','Which method requires a supplicant and an authentication service for per-user identity?',
     'WPA2/WPA3-Enterprise with 802.1X','One shared PSK on every endpoint','Open association without any authentication policy',
     'Enterprise WLANs use EAP exchanges through the authenticator and typically RADIUS. Test AP join, identity and post-authentication VLAN policy separately.']
-].map(check);
+].concat(voiceConcepts).map(check);
 
 export const enarsiConcepts = [
   ['1.1','Administrative distance','OSPF and eBGP contribute the same prefix and mask. With default settings, which route source wins?',
@@ -301,4 +310,4 @@ export const enarsiConcepts = [
   ['4.7','Assurance triage','Catalyst Center reports low application health at one site. What is the most useful next action?',
     'Correlate the affected site and clients with the issue timeline, interface counters and measurements','Change the intended design across every site immediately','Treat the health score as proof that the only router is compromised',
     'Use Assurance to reduce scope, then confirm the evidence from the affected interfaces, clients and path. Establish whether the cause is reachability, errors, utilization or an application issue.']
-].map(check);
+].concat(voiceConcepts).map(check);

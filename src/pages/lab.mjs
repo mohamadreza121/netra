@@ -8,7 +8,7 @@ export function lab() {
 <section class="sim-workspace frame" aria-label="Network simulator">
   <div class="sim-tools">
     <div id="sim-add" class="sim-add" aria-label="Add devices"></div>
-    <div class="sim-actions"><button type="button" id="sim-enterprise" class="sim-button sim-accent">Load Enterprise Campus</button><button type="button" id="sim-routing" class="sim-button">Load Routing Core</button><select id="sim-vpn-lab" aria-label="Load a VPN topology"><option value="">Load a VPN topology</option><option value="provider-vpn">Provider VPN · MPLS</option><option value="dmvpn">DMVPN Phase 3</option></select><a class="sim-button" href="#ios-commands" id="ios-command-link">Command index</a><a class="sim-button" href="/labsim/ccnp/">CCNP guided labs</a><button type="button" id="sim-export" class="sim-button">Export JSON</button><button type="button" id="sim-import" class="sim-button">Import JSON</button><input id="sim-import-file" type="file" accept=".json,application/json" hidden><button type="button" id="sim-starter" class="sim-button">Load Branch LAN</button><button type="button" id="sim-empty" class="sim-button">New empty lab</button></div>
+    <div class="sim-actions"><button type="button" id="sim-enterprise" class="sim-button sim-accent">Load Enterprise Campus</button><button type="button" id="sim-routing" class="sim-button">Load Routing Core</button><select id="sim-voice-lab" aria-label="Load a voice lab"><option value="">Load a voice lab</option><option value="starter">CME · Configure the phones</option><option value="ready">CME · Ready to call</option></select><select id="sim-vpn-lab" aria-label="Load a VPN topology"><option value="">Load a VPN topology</option><option value="provider-vpn">Provider VPN · MPLS</option><option value="dmvpn">DMVPN Phase 3</option></select><a class="sim-button" href="#ios-commands" id="ios-command-link">Command index</a><a class="sim-button" href="/labsim/ccnp/">CCNP guided labs</a><button type="button" id="sim-export" class="sim-button">Export JSON</button><button type="button" id="sim-import" class="sim-button">Import JSON</button><input id="sim-import-file" type="file" accept=".json,application/json" hidden><button type="button" id="sim-starter" class="sim-button">Load Branch LAN</button><button type="button" id="sim-empty" class="sim-button">New empty lab</button></div>
   </div>
   <p id="sim-status" role="status" class="sim-status"></p>
   <div class="sim-grid">
@@ -55,10 +55,30 @@ export function lab() {
           <li>On <b>R2</b>, <button type="button" data-device="R2" data-lab-command="show ip nhrp shortcut">inspect the shortcut</button> and <button type="button" data-device="R2" data-lab-command="show crypto ipsec sa">read the IPsec counters</button>. These counters model negotiated protection and forwarded packets.</li>
         </ol>
       </details>
+      <details class="sim-panel sim-help sim-scenario" data-lab-scenario="voice-cme" hidden open>
+        <summary>Configure and test SCCP calls</summary>
+        <ol>
+          <li>SW1 carries data VLAN 10 and voice VLAN 20. Check the <button type="button" data-device="SW1" data-lab-command="show interfaces Gi0/2 switchport">phone-facing switchport</button>. PC1 shares that port through TEL1.</li>
+          <li>In a fresh voice lab, add <code>option 150 ip 10.20.20.1</code> to DHCP pool <code>VOICE</code> on R1. Set up <code>telephony-service</code>, DNs 2001 and 2002, and run <code>create cnf-files</code>. <a href="/ccnp/?track=encor&amp;lab=voice-cme-sccp#labs">Open the configuration walkthrough</a>.</li>
+          <li><button type="button" data-device="TEL1" data-lab-command="boot">Boot TEL1</button>, then <button type="button" data-device="TEL2" data-lab-command="boot">boot TEL2</button>. Check <button type="button" data-device="R1" data-lab-command="show ephone registered summary">which phones registered</button> in privileged EXEC.</li>
+          <li><button type="button" data-device="TEL1" data-lab-command="dial 2002">Dial 2002 from TEL1</button> and <button type="button" data-device="TEL2" data-lab-command="answer">answer on TEL2</button>. <button type="button" data-device="R1" data-lab-command="show telephony-service events">Read the CME event log</button> for ringing, connected, or failed states.</li>
+        </ol>
+        <p>Choose a command to load it into the console, then press Enter.</p>
+      </details>
       <section class="sim-panel sim-console" aria-label="Device console">
         <div class="sim-bar"><h2 id="sim-console-title">Device console</h2><button class="sim-button" type="button" id="sim-clear">Clear</button></div>
         <pre id="sim-output" role="log" tabindex="0" aria-label="Command output"></pre>
         <form id="sim-console"><label id="sim-prompt" for="sim-command">›</label><input id="sim-command" aria-label="CLI command" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="512" placeholder="Type sh ip int br or ? for help"><button class="sim-button sim-accent" type="submit">Run ⏎</button></form>
+        <div id="sim-phone-controls" class="sim-phone-controls" hidden>
+          <p id="sim-phone-state" role="status"></p>
+          <div class="sim-phone-actions">
+            <button class="sim-button" type="button" data-phone-command="boot">Boot / register</button>
+            <button class="sim-button sim-accent" type="button" data-phone-command="answer">Answer</button>
+            <button class="sim-button" type="button" data-phone-command="reject">Reject</button>
+            <button class="sim-button" type="button" data-phone-command="hangup">Hang up</button>
+            <button class="sim-button" type="button" data-phone-command="show phone log">Call log</button>
+          </div>
+        </div>
         <p class="sim-keyboard"><kbd>?</kbd> Show matching commands <kbd>Tab</kbd> Complete a keyword <kbd>↑</kbd> Recall</p>
       </section>
     </div>

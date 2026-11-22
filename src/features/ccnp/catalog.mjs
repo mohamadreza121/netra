@@ -4,11 +4,12 @@ import { overlays } from './overlays.mjs';
 import { security } from './security.mjs';
 import { assurance } from './assurance.mjs';
 import { automation } from './automation.mjs';
+import { voicePractice } from './voice.mjs';
 import { supplements } from './supplement.mjs';
 import { encorConcepts, enarsiConcepts } from './concepts.mjs';
 import { labelMode } from './lesson.mjs';
 
-export const labs = [...routing,...infrastructure,...overlays,...security,...assurance,...automation,...supplements];
+export const labs = [...routing,...infrastructure,...overlays,...security,...assurance,...automation,...supplements,...voicePractice];
 
 export const portableChapters = [
   'VLANs, trunks and EtherChannel','Spanning tree','Inter-VLAN routing','EIGRP','OSPF',
@@ -20,12 +21,13 @@ const domains = pairs => pairs.map(([title,weight],index)=>({id:index+1,title,we
 const encorDomains = domains([
   ['Architecture',15],['Virtualization',10],['Infrastructure',30],['Network assurance',10],
   ['Security',20],['Automation and AI',15],['Wireless supplement',0]
-]);
+]).concat({id:8,title:'Enterprise voice supplement',weight:0});
 const enarsiDomains = domains([
   ['Layer 3 technologies',35],['VPN technologies',20],['Infrastructure security',20],['Infrastructure services',25]
-]);
+]).concat({id:8,title:'Enterprise voice supplement',weight:0});
 
 export function domainOf(objective) {
+  if(objective?.startsWith('extra.voice-'))return 8;
   return objective?.startsWith('extra.')?7:Number(objective?.split('.')[0]);
 }
 

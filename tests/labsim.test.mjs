@@ -140,7 +140,7 @@ test('switch interface ranges, native trunks and management SVIs reflect cable s
   configure('en','conf t','int ra gi0/5 - 7','sw mo ac','sw ac vl 10','desc Staff Port','exit',
     'int vlan 10','ip add 192.168.10.11 24','no sh','end');
   assert.match(configure('sh int desc'),/Gi0\/7.+Staff Port/);
-  assert.match(configure('sh ip int br'),/Vlan10 +192.168.10.11 +up +up/);
+  assert.match(configure('sh ip int br'),/Vlan10 +192\.168\.10\.11 +YES manual +up +up/);
   assert.match(host('ping 192.168.10.11'),/100 percent/);
   assert.match(configure('sh mac address-table dynamic vlan 10'),/DYNAMIC.*Gi0\/2/);
   assert.match(terminal(lab,r)('sh cdp nei det'),/SW1/);

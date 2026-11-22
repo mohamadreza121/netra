@@ -1,3 +1,4 @@
+import { cmeIOS, cmePhoneCommands } from './cme-cli.js';
 import { ipsecIOS } from './ipsec.js';
 import { deviceFilesIOS } from './device-files.js';
 import { packetPolicyIOS } from './packet-policy.js';
@@ -32,15 +33,15 @@ const privileged = [
   'clear arp-cache', 'clear ip arp [<address>]'
 ];
 const deviceExec = {
-  router:['show ip route','show ip route connected','show ip route local','show ip route static','show ip route ospf','show ip route <address>',
+  router:['show ip route','show ip route summary','show ip route connected','show ip route local','show ip route static','show ip route ospf','show ip route <address>',
     'show ip protocols','show ip ospf','show ip ospf neighbor [detail]','show ip ospf interface brief','show ip ospf interface [<interface...>]',
     'show ip ospf database','show ip dhcp binding [<address>]','show ip dhcp pool [<name>]','clear ip dhcp binding <address-or-*>',
     'show access-lists [<name>]','show ip access-lists [<name>]','show ipv6 interface brief','show ipv6 interface [<interface...>]',
     'show ip nat translations [verbose]','show ip nat statistics','clear ip nat translation *',
     'show ipv6 route','show ipv6 route connected','show ipv6 route local','show ipv6 route static','show ipv6 neighbors'],
   wlc:[],
-  switch:['show ip route','show ip route connected','show ip route static','show ip route <address>','show vlan','show vlan brief','show vlan id <vlan>','show vlan name <name>','show interfaces trunk','show interfaces switchport',
-    'show interfaces <interface> switchport','show interfaces <interface> status','show interfaces <interface> trunk',
+  switch:['show ip route','show ip route summary','show ip route connected','show ip route static','show ip route <address>','show vlan','show vlan brief','show vlan id <vlan>','show vlan name <name>','show interfaces trunk','show interfaces switchport',
+    'show interfaces <interface...> switchport','show interfaces <interface...> status','show interfaces <interface...> trunk','show interfaces status err-disabled',
     'show interfaces vlan <vlan>','show spanning-tree','show spanning-tree summary','show spanning-tree vlan <vlan> [root]','show spanning-tree root',
     'show etherchannel summary','show etherchannel <group> summary','show port-security','show port-security interface <interface...>',
     'show ip dhcp snooping','show ip dhcp snooping statistics','show ip dhcp snooping binding','show ip arp inspection','show ip arp inspection statistics','show ip arp inspection interfaces [<interface...>]','show mac address-table','show mac address-table count','show mac address-table dynamic',
@@ -115,7 +116,7 @@ const ospfMode = [
 ];
 
 function iosPatterns(type) {
-  const extensions=[deviceFilesIOS,...(type==='wlc'?[wirelessIOS]:[bgpIOS,eigrpIOS,policyIOS,vrfIOS,availabilityIOS,ospfv3IOS,mplsIOS,packetPolicyIOS,qosIOS,netflowIOS,ipv6ServiceIOS,...(type==='router'?[greIOS,ipsecIOS]:[raGuardIOS,campusIOS])])];
+  const extensions=[deviceFilesIOS,...(type==='wlc'?[wirelessIOS]:[bgpIOS,eigrpIOS,policyIOS,vrfIOS,availabilityIOS,ospfv3IOS,mplsIOS,packetPolicyIOS,qosIOS,netflowIOS,ipv6ServiceIOS,...(type==='router'?[greIOS,ipsecIOS,cmeIOS]:[raGuardIOS,campusIOS])])];
   const ext=(mode)=>extensions.flatMap(x=>x[mode]??[]);
   const ops=[...serviceIOS.operational,...identityIOS.operational,...ext('operational'),
     ...(type==='switch'?[...identityIOS.switchOperational,...deviceExec.router.filter(c=>/^show (ip ospf|ip protocols|ip route ospf|ip route local|ip access-lists|access-lists|ipv6)/.test(c))]:[])];
@@ -131,7 +132,7 @@ function iosPatterns(type) {
     interface:[...config,...port,...devicePort[type],...layer3Switch,...(type==='wlc'?[]:ospfInterface),...ext('interface'),...(type==='switch'?identityIOS.interface:[])],
     radius:identityIOS.radius,tacacs:identityIOS.tacacs,aaagroup:identityIOS.aaagroup,line:identityIOS.line
   };
-  if(type==='router')modes.pool=['network <network> <mask>','default-router <address>','dns-server <address>','domain-name <domain>','option 150 ip <address>','lease <days> [<hours>] [<minutes>]'];
+  if(type==='router')modes.pool=['network <network> <mask>','default-router <address>','dns-server <address>','domain-name <domain>','option 150 ip <address>','no option 150','lease <days> [<hours>] [<minutes>]'];
   if(type==='switch'){
     modes.range=[...port,...devicePort.switch.filter(c=>!c.startsWith('ip address')&&c!=='no ip address'),...identityIOS.interface,...campusIOS.interface];
     modes.vlan=['name <name...>','shutdown','no shutdown'];
@@ -161,7 +162,7 @@ const accessPoint = [
 export const commandSets=Object.fromEntries(['router','switch','wlc'].map(type=>[type,iosPatterns(type)]));
 Object.assign(commandSets,{
   ap:{endpoint:[...accessPoint,...apControllerCommands]},pc:{endpoint:host},
-  phone:{endpoint:[...host,...phoneCommands,'show phone','extension <number>','dial <number>']},
+  phone:{endpoint:[...host,...phoneCommands,...cmePhoneCommands,'show phone','extension <number>','dial <number>']},
   ise:{endpoint:[...endpointCommands,...iseCommands]},server:{endpoint:[...endpointCommands,...serverCommands,...server6Commands]}
 });
 export const filterGrammar = compile(['include <text...>','exclude <text...>','begin <text...>','section <text...>','interface <interface...>']);
