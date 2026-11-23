@@ -2,7 +2,8 @@ const routes = [
   ['', 'Home'], ['ccna', 'CCNA Practice'], ['ccnp', 'CCNP Practice'], ['labsim', 'LabSim']
 ];
 
-const logo = '<span class="brand-icon" aria-hidden="true">✳</span><span>netra<span class="brand-period">.</span></span>';
+const logoPath = '/assets/netra.svg';
+const logo = `<img class="brand-icon" src="${logoPath}" width="56" height="56" alt="">`;
 
 const links = (route) => routes.map(([path, label]) =>
   `<a href="/${path ? path + '/' : ''}" ${path === route ? 'aria-current="page"' : ''}>${label}</a>`
@@ -20,7 +21,7 @@ export function layout({route, title, content, intro}) {
 <meta name="theme-color" content="#111c19">
 <meta name="description" content="Netra is a browser-based workspace for CCNA and CCNP practice and Cisco configuration labs.">
 <title>${route ? title + ' · Netra' : 'Netra — Learn. Simulate. Master.'}</title>
-<link rel="icon" href="/assets/netra.svg" type="image/svg+xml">
+<link rel="icon" href="${logoPath}" type="image/svg+xml">
 <link rel="stylesheet" href="/styles/main.css">
 ${intro ? '<link rel="stylesheet" href="/styles/rack.css"><script type="module" src="/motion.js"></script>' : ''}
 ${practice ? `<link rel="stylesheet" href="/styles/ccna.css">${practice === 'ccnp' ? '<link rel="stylesheet" href="/styles/ccnp.css">' : ''}<script type="module" src="/features/${practice}/app.mjs"></script>` : ''}

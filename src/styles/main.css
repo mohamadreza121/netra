@@ -86,14 +86,9 @@ code, pre { font-family: var(--mono); }
   --nav-hover-bg: #91efce;
   --nav-hover-depth: #4eab8e;
 }
-.site-header .brand-icon, .site-header .brand-period {
-  color: var(--nav-accent);
-  transition: color .48s ease;
-}
 .nav-wrap { width: min(100% - 96px, 1380px); min-height: 72px; margin: auto; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
-.brand { display: inline-flex; align-items: center; gap: 10px; font-size: 30px; line-height: 1; font-weight: 800; letter-spacing: -.09em; }
-.brand-icon { font-size: 24px; color: var(--acid); }
-.brand-period { color: var(--acid); }
+.brand { display: inline-flex; align-items: center; }
+.brand-icon { display: block; width: 56px; height: 56px; }
 .site-header nav, .site-footer nav { display: flex; gap: clamp(16px, 3vw, 42px); align-items: center; }
 .site-header nav a, .site-footer nav a { color: var(--muted); font-size: .875rem; }
 .site-header nav a { color: var(--nav-muted); transition: color .48s ease; }
@@ -269,7 +264,6 @@ code, pre { font-family: var(--mono); }
   font-display: swap;
 }
 :root { --display: "Space Grotesk", Arial, Helvetica, sans-serif; }
-.brand { font-family: Orbitron, Arial, Helvetica, sans-serif; letter-spacing: -.055em; }
 .section-copy h2, .interior-hero h1 {
   font-family: var(--display);
   letter-spacing: -.075em;

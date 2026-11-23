@@ -1,1 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#182520"/><path d="M32 8v48M8 32h48M15 15l34 34m0-34L15 49" stroke="#d8f27b" stroke-width="6"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="netra-symbol-title netra-symbol-description">
+  <title id="netra-symbol-title">Netra</title>
+  <desc id="netra-symbol-description">Four lime-green aperture blades curl around a diamond-shaped pupil.</desc>
+  <defs>
+    <mask id="netra-aperture" x="0" y="0" width="256" height="256" maskUnits="userSpaceOnUse">
+      <path fill="#fff" d="M20 123C53 83 90 53 128 53s75 30 108 70a8 8 0 0 1 0 10c-33 40-70 70-108 70s-75-30-108-70a8 8 0 0 1 0-10Z"/>
+      <path d="M128 84l44 44-44 44-44-44Z"/>
+      <path d="M128 90 169 47M166 128l18-18a10 10 0 0 1 12 0l46 31M128 166l-41 43m3-81-18 18a10 10 0 0 1-12 0l-46-31" fill="none" stroke="#000" stroke-width="8.5" stroke-linejoin="round"/>
+    </mask>
+  </defs>
+  <g mask="url(#netra-aperture)">
+    <path fill="#D8F678" d="M0 0h256v256H0z"/>
+    <path id="netra-blade" fill="#A3DF6B" d="M175 40h81v110l-60-40a10 10 0 0 0-12 0l-18 18-38-38Z"/>
+    <use href="#netra-blade" transform="rotate(180 128 128)"/>
+  </g>
+</svg>
